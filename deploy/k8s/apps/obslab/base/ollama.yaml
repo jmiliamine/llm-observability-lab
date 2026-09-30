@@ -1,0 +1,11 @@
+# Ollama stays OUTSIDE the cluster, on the host, where it can use the GPU (docs/adr/0013).
+# An ExternalName Service gives it a cluster-native name ("ollama") so the app config does not
+# hard-code a host address; moving Ollama into the cluster (or to a hosted API) only changes
+# this object. host.docker.internal is Docker Desktop's DNS name for the host machine.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+spec:
+  type: ExternalName
+  externalName: host.docker.internal

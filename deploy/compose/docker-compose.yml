@@ -1,0 +1,94 @@
+# Lightweight fallback of the observability stack (the Kubernetes version in deploy/k8s is
+# the main target). Useful when the cluster is off, to save RAM, or for a quick CI smoke test.
+# The app and Ollama run on the host.
+#   task stack:up        (or: docker compose -f deploy/compose/docker-compose.yml up -d)
+# Grafana http://localhost:3000 · Prometheus :9090 · Tempo :3200 · Loki :3100
+# Every port is bound to 127.0.0.1: nothing here has authentication worth exposing on a network.
+# App -> OTLP/HTTP localhost:4318 -> collector -> Prometheus (metrics), Tempo (traces), Loki (logs)
+name: obslab
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.131.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"     # OTLP gRPC
+      - "127.0.0.1:4318:4318"     # OTLP HTTP (the app uses this)
+      - "127.0.0.1:8889:8889"     # Prometheus exporter (scraped by Prometheus)
+      - "127.0.0.1:13133:13133"   # health check
+    depends_on: [tempo, loki]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --enable-feature=exemplar-storage
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../shared/prometheus:/etc/prometheus/rules:ro     # same SLO rules as the k8s PrometheusRule
+      - prometheus-data:/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+    ports: ["127.0.0.1:3200:3200"]
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.5.3
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki.yaml:/etc/loki/config.yaml:ro
+    ports: ["127.0.0.1:3100:3100"]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment:
+      # Anonymous visitors can look (dashboards and Explore) but not change anything. To edit,
+      # sign in as admin/admin (Grafana asks for a new password on first login).
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_VIEWERS_CAN_EDIT: "true"        # lets Viewers use Explore; they still cannot save
+      GF_FEATURE_TOGGLES_ENABLE: traceToMetrics
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../shared/grafana:/var/lib/grafana/dashboards:ro  # same dashboard as the k8s ConfigMap
+      - grafana-data:/var/lib/grafana
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [prometheus, tempo, loki]
+    restart: unless-stopped
+
+  # Vector store (docs/adr/0008). Same image and init script as the cluster. The passwords below
+  # are local-only defaults for a port bound to 127.0.0.1; override them in a .env file if you like.
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg18-trixie
+    environment:
+      POSTGRES_DB: obslab
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${OBSLAB_PG_ADMIN_PASSWORD:-postgres-local}
+      OBSLAB_WRITER_PASSWORD: ${OBSLAB_WRITER_PASSWORD:-writer-local}
+      OBSLAB_READER_PASSWORD: ${OBSLAB_READER_PASSWORD:-reader-local}
+    volumes:
+      - ../shared/postgres/init-obslab.sh:/docker-entrypoint-initdb.d/10-obslab.sh:ro
+      - postgres-data:/var/lib/postgresql
+    ports: ["127.0.0.1:5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d obslab"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  postgres-data:

@@ -1,0 +1,109 @@
+"""Against a running observability stack: the telemetry of one question must reach Prometheus
+(metrics), Tempo (trace) and Loki (logs).
+
+The same test runs against both deployments, only URLs change (env vars set by the task):
+  task stack:up && task test:stack TARGET=compose
+  task up       && task test:stack               (TARGET=k8s is the default)
+The app runs in this process and exports OTLP to OTEL_EXPORTER_OTLP_ENDPOINT (localhost:4318
+in both setups). With OBSLAB_PROVIDER=fake (the task default) no model is needed: the index is
+built from samples/notes into a temp folder. PROVIDER=ollama uses the real models.
+"""
+
+import dataclasses
+import os
+import time
+import urllib.parse
+import uuid
+from pathlib import Path
+
+import pytest
+
+from lab_http import request, unavailable, wait_up
+
+pytestmark = pytest.mark.stack
+
+PROM = os.environ.get("PROM_URL", "http://localhost:9090")
+TEMPO = os.environ.get("TEMPO_URL", "http://localhost:3200")
+LOKI = os.environ.get("LOKI_URL", "http://localhost:3100")
+NOTES = Path(__file__).resolve().parents[2] / "samples" / "notes"
+# One id per test run: queries only match this run's telemetry, not an earlier one.
+RUN_ID = uuid.uuid4().hex[:12]
+
+
+@pytest.fixture(scope="module")
+def asked(tmp_path_factory):
+    from obslab.app import build_components
+    from obslab.config import Settings
+    from obslab.rag import corpus, index
+    from obslab.rag.providers import embeddings
+    from obslab.telemetry import GenAIMetrics, init_telemetry
+
+    settings = Settings()
+    needed = [f"{PROM}/-/ready", f"{TEMPO}/ready", f"{LOKI}/ready"]
+    if settings.provider == "ollama":
+        needed.append(f"{settings.ollama_url}/api/version")
+    for url in needed:
+        if not wait_up(url):
+            unavailable(f"stack not reachable ({url})")
+
+    os.environ["OTEL_RESOURCE_ATTRIBUTES"] = f"service.instance.id={RUN_ID}"
+    settings = dataclasses.replace(settings, telemetry="otlp", environment="stack-test", vector_store="memory",
+                                   index_path=tmp_path_factory.mktemp("index") / "index.json",
+                                   min_score=0.2 if settings.provider == "fake" else settings.min_score)
+    tel = init_telemetry(settings, set_global=True)
+    docs = corpus.split(corpus.load_folder(NOTES))
+    index.build(docs, embeddings(settings, tel, GenAIMetrics(tel.meter)), settings.index_path,
+                meta={"provider": settings.provider, "embed_model": settings.embed_model_id})
+    c = build_components(settings, tel)
+    with tel.tracer.start_as_current_span("stack-test") as span:
+        result = c.ask("How do you back up and restore etcd?")
+        trace_id = format(span.get_span_context().trace_id, "032x")
+    tel.shutdown()          # flushes spans, metrics and logs
+    return result, trace_id
+
+
+def _poll(fn, timeout=90):
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            value = fn()
+        except Exception:
+            value = None
+        if value:
+            return value
+        time.sleep(3)
+    return None
+
+
+def test_question_is_answered(asked):
+    result, _ = asked
+    assert result["route"] == "answered", result
+    assert any("etcd" in s for s in result["sources"])
+
+
+def test_metrics_reach_prometheus(asked):
+    # The collector's Prometheus exporter maps service.instance.id to the `instance` label.
+    q = urllib.parse.quote('sum(gen_ai_client_operation_duration_seconds_count'
+                           f'{{gen_ai_operation_name="chat",instance="{RUN_ID}"}})')
+    res = _poll(lambda: request(f"{PROM}/api/v1/query?query={q}")["data"]["result"])
+    assert res and float(res[0]["value"][1]) >= 1, f"no chat metric for service.instance.id={RUN_ID}"
+
+
+def test_trace_reaches_tempo(asked):
+    _, trace_id = asked
+
+    def complete_trace():
+        # Tempo serves a trace as soon as its first spans land; batches keep arriving for a
+        # few seconds, so wait for the full tree rather than the first fragment.
+        text = str(request(f"{TEMPO}/api/traces/{trace_id}"))
+        return text if "invoke_workflow rag" in text and "chat " in text else None
+
+    assert _poll(complete_trace) is not None, f"complete trace {trace_id} not found in Tempo"
+
+
+def test_logs_reach_loki_with_the_trace_id(asked):
+    _, trace_id = asked
+    q = urllib.parse.quote(f'{{service_name="obslab-rag"}} | trace_id="{trace_id}"')
+    start = int((time.time() - 900) * 1e9)
+    res = _poll(lambda: request(f"{LOKI}/loki/api/v1/query_range?query={q}&start={start}&limit=5")["data"]["result"])
+    assert res, f"no log line carrying trace_id={trace_id} in Loki"

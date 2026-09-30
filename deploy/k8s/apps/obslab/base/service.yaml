@@ -1,0 +1,12 @@
+# Stable in-cluster address of the API: obslab-api.obslab:8000 (the HTTPRoute points here).
+apiVersion: v1
+kind: Service
+metadata:
+  name: obslab-api
+spec:
+  selector:
+    app.kubernetes.io/name: obslab-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

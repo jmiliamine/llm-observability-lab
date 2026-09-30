@@ -1,0 +1,10 @@
+# "restricted" is the strictest Pod Security Standard: non-root, no privilege escalation,
+# dropped capabilities, seccomp. Everything in this namespace is written to pass it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: obslab
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    obslab.dev/gateway-access: "true"     # allowed to attach HTTPRoutes to the shared Gateway

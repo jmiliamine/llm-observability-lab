@@ -1,0 +1,5 @@
+# Same bytes on Windows and Linux clones: generated files are compared byte for byte by `task lint`.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary

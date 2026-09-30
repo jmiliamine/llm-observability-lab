@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obslab"
+version = "0.1.0"
+description = "A LangGraph RAG over your own notes, instrumented with the OpenTelemetry GenAI conventions and observed with Prometheus, Tempo, Loki and Grafana on a k3d home lab."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Amine Jmili", email = "93337867+jmiliamine@users.noreply.github.com" }]
+keywords = ["rag", "langgraph", "opentelemetry", "genai", "observability", "grafana", "kubernetes", "k3d"]
+requires-python = ">=3.14"
+dependencies = [
+  "langgraph~=1.2",
+  "langchain-core~=1.6",
+  "langchain-ollama~=1.1",
+  "langchain-text-splitters~=1.1",
+  "numpy>=2.1",
+  "opentelemetry-sdk~=1.44",
+  "opentelemetry-exporter-otlp-proto-http~=1.44",
+  "opentelemetry-instrumentation-fastapi~=0.65b0",
+  "opentelemetry-instrumentation-logging~=0.65b0",
+  "fastapi>=0.142",           # telemetry= argument (see api.py)
+  "uvicorn>=0.30",
+  "psycopg[binary]>=3.2",
+  "psycopg-pool>=3.2",
+  "pgvector>=0.4",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27", "pytest-socket>=0.7", "ruff>=0.14"]
+
+[project.scripts]
+obslab = "obslab.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests", "tests/e2e"]
+markers = [
+  "stack: needs the observability stack running (docker compose or the k3d cluster); URLs come from env",
+  "k8s: needs the k3d cluster with the app deployed (task up)",
+  "ollama: needs a local Ollama with the configured models pulled",
+  "pgvector: needs the PostgreSQL + pgvector service (task test:pgvector)",
+]
+addopts = "-m 'not stack and not k8s and not ollama and not pgvector'"
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+extend-exclude = ["build", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Dashboard definitions: one PromQL expression per line reads better than wrapped strings.
+"scripts/gen_observability.py" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["obslab"]
+known-local-folder = ["conftest", "lab_http"]

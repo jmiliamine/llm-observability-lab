@@ -1,0 +1,30 @@
+# grafana-community/tempo 3.0.0 (Tempo 3.0) single binary — traces from the OTel Collector over OTLP gRPC.
+# Chart source: Grafana moved its community charts to github.com/grafana-community/helm-charts
+# in 2026 (the old grafana/tempo chart is marked deprecated).
+# In the cloud the same role goes to a managed tracing service, or Tempo on object storage.
+tempo:
+  reportingEnabled: false          # no usage reporting from a home lab
+  retention: 72h                   # aligned with Prometheus and Loki
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 512Mi}
+  # We only send OTLP. The chart templates require the default Jaeger receiver block, so it
+  # stays, but the Service is ClusterIP-only and NetworkPolicies decide who can reach it.
+  receivers:
+    otlp:
+      protocols:
+        grpc: {endpoint: "0.0.0.0:4317"}
+        http: {endpoint: "0.0.0.0:4318"}
+  storage:
+    trace:
+      backend: local
+      local: {path: /var/tempo/traces}
+      wal: {path: /var/tempo/wal}
+
+persistence:
+  enabled: true
+  storageClassName: local-path
+  size: 2Gi
+
+tempoQuery:
+  enabled: false                   # Jaeger UI proxy: Grafana is the only UI

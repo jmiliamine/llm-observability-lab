@@ -1,0 +1,22 @@
+# The RAG service, as an app team would own it: everything it needs lives in its namespace.
+# Rendered with `kubectl kustomize` (built into kubectl); the overlay picks image and env.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: obslab
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: obslab
+    includeSelectors: false
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - configmap.yaml
+  - ollama.yaml
+  - postgres-init.generated.yaml     # from deploy/shared/postgres (task gen)
+  - postgres.yaml
+  - ingest-cronjob.yaml
+  - deployment.yaml
+  - pdb.yaml
+  - service.yaml
+  - httproute.yaml
+  - networkpolicy.yaml

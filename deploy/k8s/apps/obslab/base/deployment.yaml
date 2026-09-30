@@ -1,0 +1,94 @@
+# The RAG HTTP API.
+#
+# Stateless: the vector index lives in PostgreSQL (postgres.yaml), so replicas are
+# interchangeable. Two of them, spread over the nodes, plus a PodDisruptionBudget (pdb.yaml):
+# a rollout or a `kubectl drain` never takes the API down.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obslab-api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1              # start a new pod first...
+      maxUnavailable: 0        # ...and only then stop an old one: no downtime on deploy
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: obslab-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: obslab-api
+    spec:
+      serviceAccountName: obslab
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30     # SIGTERM -> FastAPI lifespan closes DB connections, flushes telemetry
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      # Prefer one replica per node; with a single node left, both still schedule.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: obslab-api
+      containers:
+        - name: api
+          image: obslab                      # replaced by the overlay (registry + immutable tag)
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef: {name: obslab-config}
+          env:
+            # Read-only database role: the API can search the index, never change it.
+            - {name: PGUSER, value: obslab_reader}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: obslab-db, key: reader-password}}
+            # Downward API: the pod tells OpenTelemetry who it is (resource attributes on every
+            # span/metric/log). The collector's k8sattributes processor adds the rest.
+            - name: K8S_POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: K8S_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - name: K8S_NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE),k8s.node.name=$(K8S_NODE_NAME)
+          # No index in memory any more: the pod holds the graph, the models' HTTP clients and a
+          # small connection pool. Memory limit = OOM guard; no CPU limit (throttling hurts latency).
+          resources:
+            requests: {cpu: 50m, memory: 160Mi}
+            limits: {memory: 512Mi}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+            failureThreshold: 24             # up to 2 minutes
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Ready = the database answers and holds an index built with the configured model.
+          # Before the first ingest the pods stay unready instead of answering "I don't know".
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true      # the app writes nothing but /tmp
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}

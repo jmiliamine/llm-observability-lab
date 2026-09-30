@@ -1,0 +1,52 @@
+# SLIs as recording rules + alerts on them. Targets are for a local 3B model on
+# a small local model on a laptop GPU; tighten them for a hosted model.
+groups:
+  - name: rag-sli
+    rules:
+      - record: rag:requests:rate5m
+        expr: sum(rate(gen_ai_invoke_workflow_duration_seconds_count[5m]))
+      - record: rag:errors:ratio5m
+        expr: |
+          # "or vector(0)": the error series only exists after the first error;
+          # without it the ratio is empty (not 0) and the alert/panel shows "No data".
+          (sum(rate(gen_ai_invoke_workflow_duration_seconds_count{error_type!=""}[5m])) or vector(0))
+          / clamp_min(sum(rate(gen_ai_invoke_workflow_duration_seconds_count[5m])), 1e-9)
+      - record: rag:latency:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(gen_ai_invoke_workflow_duration_seconds_bucket[5m])))
+      - record: rag:ttfc:p95_5m
+        expr: histogram_quantile(0.95, sum by (le, gen_ai_request_model) (rate(gen_ai_client_operation_time_to_first_chunk_seconds_bucket[5m])))
+      - record: rag:fallback:ratio15m
+        expr: |
+          (sum(increase(rag_fallbacks_total[15m])) or vector(0))
+          / clamp_min(sum(increase(gen_ai_invoke_workflow_duration_seconds_count[15m])), 1e-9)
+      - record: rag:groundedness:p50_15m
+        expr: histogram_quantile(0.5, sum by (le) (rate(rag_answer_groundedness_bucket[15m])))
+      - record: llm:tokens:rate5m
+        expr: sum by (gen_ai_request_model) (rate(gen_ai_client_inference_usage_input_tokens_total[5m]) + rate(gen_ai_client_inference_usage_output_tokens_total[5m]))
+
+  - name: rag-alerts
+    rules:
+      - alert: RagErrorRateHigh
+        expr: rag:errors:ratio5m > 0.05 and rag:requests:rate5m > 0
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "RAG error ratio {{ $value | humanizePercentage }} (SLO: < 5%)"
+      - alert: RagLatencyP95High
+        expr: rag:latency:p95_5m > 30
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: "RAG p95 latency {{ $value | humanizeDuration }} (SLO: < 30s locally)"
+      - alert: RagFallbackRateHigh
+        expr: rag:fallback:ratio15m > 0.3
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of questions found no relevant context — index stale or threshold too strict?"
+      - alert: RagGroundednessLow
+        expr: rag:groundedness:p50_15m < 0.5
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: "Median groundedness {{ $value }} — answers drift away from retrieved context"

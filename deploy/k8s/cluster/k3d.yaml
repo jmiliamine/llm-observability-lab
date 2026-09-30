@@ -1,0 +1,52 @@
+# k3d cluster = k3s (CNCF-certified Kubernetes, the de facto home-lab distribution)
+# running as Docker containers. Created by `task cluster:up`.
+#
+# Why this shape (see docs/adr/0009):
+#   - 1 server + 1 agent: a real control-plane/worker split (drain, cordon, node affinity,
+#     PV node pinning can be practised) for ~150 MB more than a single node.
+#   - memory caps per node (3 GB + 5 GB): one runaway pod cannot starve the host. Docker Desktop
+#     needs at least 10 GB for the whole lab (Settings > Resources, or .wslconfig on WSL2).
+#   - a local OCI registry: images are pushed like in a company (build -> push -> pull),
+#     not side-loaded into nodes.
+#   - Traefik (bundled with k3s) is kept and used as the Gateway API implementation;
+#     metrics-server is kept for `kubectl top` and future HPAs.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: obslab
+servers: 1
+agents: 1
+# Pin the Kubernetes version: upgrades are a deliberate change, never a side effect of `k3d` updates.
+# Policy: follow the k3s *stable* channel (https://update.k3s.io/v1-release/channels), not
+# *latest* — a x.y.0 has had no patch release yet. One minor at a time (the control plane cannot
+# skip minors) and keep kubectl within +/-1 minor of the server (`task doctor` checks it).
+# In k3d an upgrade = recreate the cluster from this file (immutable nodes); see ADR 0009.
+image: rancher/k3s:v1.36.4-k3s1
+ports:
+  # Host 8080 -> k3d load balancer :80 -> Traefik Gateway (HTTP). All UIs are reached as
+  # http://<name>.localhost:8080 (browsers resolve *.localhost to 127.0.0.1).
+  - port: 8080:80
+    nodeFilters: [loadbalancer]
+  # Host 4318 -> NodePort 30318 -> OTel Collector (OTLP/HTTP). Same address as the compose stack,
+  # so the app running on Windows (dev loop) and the `stack` tests need no config change.
+  # (Not through the Gateway: Windows does not resolve *.localhost outside browsers.)
+  - port: 4318:30318
+    nodeFilters: [loadbalancer]
+registries:
+  create:
+    # Push from Windows to localhost:5001; pods pull "obslab-registry.localhost:5001/..." (node mirror in /etc/rancher/k3s/registries.yaml)
+    name: obslab-registry.localhost
+    host: "127.0.0.1"
+    hostPort: "5001"
+options:
+  k3d:
+    wait: true
+    timeout: "180s"
+  # k3s defaults are kept on purpose: Traefik (Gateway API), ServiceLB (exposes Traefik on the
+  # nodes' port 80, which the k3d load balancer forwards to), local-path storage, metrics-server.
+  # k3s embeds scheduler/controller-manager/etcd in one process: their scrape jobs are disabled
+  # in kube-prometheus-stack values rather than re-exposed (lighter, no false alerts).
+  runtime:
+    serversMemory: "3g"      # control plane + part of the platform
+    agentsMemory: "5g"       # the workload node (app, Loki, Tempo, Prometheus)
+

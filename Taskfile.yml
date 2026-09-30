@@ -1,0 +1,231 @@
+# Task runner of the lab (https://taskfile.dev). The same commands run on Windows, macOS and
+# Linux, and a CI job would call them too.
+#
+#   task doctor              check tools, Docker memory, ports, Ollama
+#   task setup               Python 3.14 + dependencies (uv)
+#   task test                unit + integration tests, offline
+#   task up                  cluster, platform, app, index (~15 min the first time)
+#   task up OVERLAY=fake     same, without Ollama or a GPU
+#   task stop / task start   pause the cluster and give the RAM back (state is kept)
+#   task --list              everything else
+version: "3"
+
+vars:
+  CLUSTER: obslab
+  PY: '{{if eq OS "windows"}}.venv/Scripts/python.exe{{else}}.venv/bin/python{{end}}'
+  REGISTRY_PUSH: localhost:5001               # how the host reaches the k3d registry
+  IMAGE: obslab
+  APP_DIR: deploy/k8s/apps/obslab
+  OVERLAY: '{{.OVERLAY | default "local"}}'   # local (Ollama) | fake (no model needed)
+  NOTES: '{{.NOTES | default "samples/notes"}}'  # folder of .md/.txt notes baked into the image
+  VALUES: deploy/k8s/platform/values
+  # Chart versions are pinned: upgrading a platform component is a reviewed one-line change.
+  KPS_VERSION: 91.5.1        # prometheus-community/kube-prometheus-stack (operator v0.94)
+  LOKI_VERSION: 18.13.5      # grafana-community/loki (Loki 3.7)
+  TEMPO_VERSION: 3.0.0       # grafana-community/tempo (Tempo 3.0)
+  OTEL_VERSION: 0.173.1      # open-telemetry/opentelemetry-collector (collector 0.160)
+
+tasks:
+  default:
+    cmds: [task --list]
+    silent: true
+
+  # ── Setup and local checks ──────────────────────────────────────────────────
+  doctor:
+    desc: Check tools, Docker memory, free ports, Ollama and the kubectl/server skew
+    cmds: ['uv run --no-project python scripts/doctor.py']
+
+  setup:
+    desc: Install Python 3.14 and the dependencies into .venv (uv)
+    cmds: ['uv sync']
+
+  test:
+    desc: Unit + integration tests (fake models, in-memory exporters, no outbound network)
+    cmds: ['{{.PY}} -m pytest -q --allow-hosts=127.0.0.1,::1']
+
+  lint:
+    desc: Ruff, generated files up to date, every Kustomize overlay renders
+    cmds:
+      - '{{.PY}} -m ruff check .'
+      - '{{.PY}} scripts/gen_observability.py --check'
+      - kubectl kustomize {{.APP_DIR}}/overlays/local > /dev/null
+      - kubectl kustomize {{.APP_DIR}}/overlays/fake > /dev/null
+
+  gen:
+    desc: Regenerate the dashboard and the PrometheusRule from deploy/shared (compose and k8s)
+    cmds: ['{{.PY}} scripts/gen_observability.py']
+
+  # ── Compose: the light stack, app on the host ───────────────────────────────
+  stack:up:
+    desc: Start Prometheus, Tempo, Loki, Grafana and the collector with docker compose (~1.5 GB)
+    cmds: ['docker compose -f deploy/compose/docker-compose.yml up -d --wait']
+
+  stack:down:
+    desc: Stop the compose stack (volumes are kept)
+    cmds: ['docker compose -f deploy/compose/docker-compose.yml down']
+
+  stack:ingest:
+    desc: Index NOTES into the compose PostgreSQL with the writer role (local-only default password)
+    env:
+      PGHOST: 127.0.0.1
+      PGDATABASE: obslab
+      PGUSER: obslab_writer
+      PGPASSWORD: '{{.OBSLAB_WRITER_PASSWORD | default "writer-local"}}'
+    cmds: ['{{.PY}} -m obslab ingest --source "{{.NOTES}}"']
+
+  # ── Cluster lifecycle ───────────────────────────────────────────────────────
+  cluster:up:
+    desc: Create the k3d cluster (1 server + 1 agent + registry) with Traefik as Gateway API
+    status: ['k3d cluster list {{.CLUSTER}}']        # idempotent: skip if it exists
+    cmds:
+      - docker compose -f deploy/compose/docker-compose.yml down 2>/dev/null || true   # frees :4318
+      - k3d cluster create --config deploy/k8s/cluster/k3d.yaml
+      # Gateway API CRDs are NOT installed here: k3s's traefik-crd chart ships the version Traefik
+      # supports and refuses CRDs it does not own (see ADR 0011).
+      - kubectl apply -f deploy/k8s/platform/traefik-gateway.yaml
+      # k3s installs Traefik asynchronously (helm-install-traefik Job): wait for it, then for the pods.
+      - kubectl -n kube-system wait --for=condition=complete job/helm-install-traefik --timeout=300s
+      - kubectl -n kube-system rollout status deploy/traefik --timeout=180s
+
+  stop:
+    desc: Stop the cluster containers (frees ~4 GB RAM, keeps all data)
+    cmds: ['k3d cluster stop {{.CLUSTER}}']
+
+  start:
+    desc: Restart a stopped cluster
+    cmds: ['k3d cluster start {{.CLUSTER}}']
+
+  cluster:down:
+    desc: Delete the cluster, its volumes and the registry (irreversible)
+    prompt: This deletes the cluster and all its data. Continue?
+    cmds: ['k3d cluster delete {{.CLUSTER}}']
+
+  # ── Platform (what a platform team owns) ────────────────────────────────────
+  platform:up:
+    desc: Install monitoring (kube-prometheus-stack) and observability (collector, Tempo, Loki)
+    cmds:
+      - kubectl apply -f deploy/k8s/platform/namespaces.yaml
+      - task: grafana:secret
+      - helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+      - helm repo add grafana-community https://grafana-community.github.io/helm-charts --force-update
+      - helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update
+      - helm repo update
+      # --wait: the next step only runs once the component is Ready (CRDs exist, pods up).
+      - helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --version {{.KPS_VERSION}} -n monitoring -f {{.VALUES}}/kube-prometheus-stack.yaml --wait --timeout 10m
+      - helm upgrade --install loki grafana-community/loki --version {{.LOKI_VERSION}} -n observability -f {{.VALUES}}/loki.yaml --wait --timeout 10m
+      - helm upgrade --install tempo grafana-community/tempo --version {{.TEMPO_VERSION}} -n observability -f {{.VALUES}}/tempo.yaml --wait --timeout 10m
+      - helm upgrade --install otel-collector open-telemetry/opentelemetry-collector --version {{.OTEL_VERSION}} -n observability -f {{.VALUES}}/otel-collector.yaml --wait --timeout 5m
+      - kubectl apply -f deploy/k8s/platform/generated/
+      - kubectl apply -f deploy/k8s/platform/gateway.yaml
+
+  grafana:secret:
+    internal: true
+    silent: true      # never echo the command: it contains the generated password
+    status: ['kubectl -n monitoring get secret grafana-admin']   # created once, never rotated silently
+    cmds:
+      - kubectl -n monitoring create secret generic grafana-admin --from-literal=admin-user=admin --from-literal=admin-password={{.PASSWORD}}
+    vars:
+      PASSWORD:
+        sh: '{{.PY}} -c "import secrets; print(secrets.token_urlsafe(18))"'
+
+  grafana:password:
+    desc: Print the Grafana admin password (user admin, http://grafana.localhost:8080)
+    cmds:
+      - kubectl -n monitoring get secret grafana-admin -o jsonpath="{.data.admin-password}" | {{.PY}} -c "import base64,sys; print(base64.b64decode(sys.stdin.read()).decode())"
+
+  # ── Application (what an app team owns) ─────────────────────────────────────
+  db:secret:
+    internal: true
+    silent: true      # never echo the command: it contains the generated passwords
+    status: ['kubectl -n obslab get secret obslab-db']       # created once, never rotated silently
+    cmds:
+      - kubectl apply -f {{.APP_DIR}}/base/namespace.yaml
+      - kubectl -n obslab create secret generic obslab-db --from-literal=admin-password={{.ADMIN}} --from-literal=writer-password={{.WRITER}} --from-literal=reader-password={{.READER}}
+    vars:
+      ADMIN: {sh: '{{.PY}} -c "import secrets; print(secrets.token_urlsafe(24))"'}
+      WRITER: {sh: '{{.PY}} -c "import secrets; print(secrets.token_urlsafe(24))"'}
+      READER: {sh: '{{.PY}} -c "import secrets; print(secrets.token_urlsafe(24))"'}
+
+  app:build:
+    desc: Stage NOTES, build the image, tag it (git SHA or timestamp), push it to the k3d registry
+    cmds:
+      - '{{.PY}} scripts/stage_notes.py "{{.NOTES}}"'
+      - docker build --build-arg VCS_REF={{.TAG}} -t {{.REGISTRY_PUSH}}/{{.IMAGE}}:{{.TAG}} .
+      - docker push {{.REGISTRY_PUSH}}/{{.IMAGE}}:{{.TAG}}
+      - '{{.PY}} scripts/set_image_tag.py {{.OVERLAY}} {{.TAG}}'
+    vars:
+      TAG:
+        sh: git rev-parse --short HEAD 2>/dev/null || {{.PY}} -c "import time; print(time.strftime('%Y%m%d-%H%M%S'))"
+
+  app:deploy:
+    desc: Apply the last built overlay and wait for the rollout
+    cmds:
+      - kubectl apply -k {{.APP_DIR}}/overlays/_build
+      - kubectl -n obslab rollout status deploy/obslab-api --timeout=15m
+
+  app:ingest:
+    desc: Build the vector index now (one-off Job from the suspended CronJob) and show its result
+    vars:
+      JOB:
+        sh: '{{.PY}} -c "import time; print(time.strftime(''obslab-ingest-%Y%m%d%H%M%S''))"'
+    cmds:
+      - kubectl -n obslab create job {{.JOB}} --from=cronjob/obslab-ingest
+      - kubectl -n obslab wait --for=condition=complete job/{{.JOB}} --timeout=20m
+      - kubectl -n obslab logs job/{{.JOB}} --tail=5
+
+  app:
+    desc: Build, apply, index and roll out the app (OVERLAY=local|fake, NOTES=folder)
+    cmds:
+      - task: app:build
+      - task: db:secret
+      - kubectl apply -k {{.APP_DIR}}/overlays/_build       # database + CronJob the ingest needs
+      - kubectl -n obslab rollout status statefulset/postgres --timeout=5m
+      - task: app:ingest
+      - task: app:deploy
+
+  up:
+    desc: Whole lab from zero (cluster, platform, app, index), ~15 min the first time
+    cmds:
+      - task: cluster:up
+      - task: platform:up
+      - task: app
+
+  ask:
+    desc: 'Ask the deployed RAG one question (Q="How do taints and tolerations work?")'
+    requires: {vars: [Q]}
+    cmds: ['{{.PY}} -m obslab ask "{{.Q}}" --url http://127.0.0.1:8080 --host-header rag.localhost:8080']
+
+  load:
+    desc: Send traffic to the deployed RAG to feed the dashboards (N=30)
+    cmds: ['{{.PY}} -m obslab load --url http://127.0.0.1:8080 --host-header rag.localhost:8080 --n {{.N | default 30}}']
+
+  # ── End-to-end checks against running infrastructure ────────────────────────
+  test:stack:
+    desc: "Telemetry of a question asked in-process reaches Prometheus, Tempo and Loki (TARGET=k8s|compose, PROVIDER=fake|ollama)"
+    vars:
+      TARGET: '{{.TARGET | default "k8s"}}'
+    env:
+      OBSLAB_REQUIRE_STACK: "1"       # an unreachable stack fails the run instead of skipping it
+      OBSLAB_PROVIDER: '{{.PROVIDER | default "fake"}}'
+      PROM_URL: '{{if eq .TARGET "compose"}}http://localhost:9090{{else}}http://prometheus.localhost:8080{{end}}'
+      TEMPO_URL: '{{if eq .TARGET "compose"}}http://localhost:3200{{else}}http://tempo.localhost:8080{{end}}'
+      LOKI_URL: '{{if eq .TARGET "compose"}}http://localhost:3100{{else}}http://loki.localhost:8080{{end}}'
+    cmds: ['{{.PY}} -m pytest -m stack -q -rs']
+
+  test:k8s:
+    desc: End to end through the Gateway, with pod identity and SLO rules checked
+    env:
+      OBSLAB_REQUIRE_STACK: "1"
+    cmds: ['{{.PY}} -m pytest -m k8s -q -rs']
+
+  test:pgvector:
+    desc: The pgvector store and its guardrails against a real PostgreSQL (starts the compose service)
+    cmds:
+      - docker compose -f deploy/compose/docker-compose.yml up -d --wait postgres
+      - '{{.PY}} -m pytest -m pgvector -q -rs'
+    env:
+      OBSLAB_REQUIRE_STACK: "1"
+
+  test:ollama:
+    desc: The RAG answers the sample questions with the real local models (needs Ollama)
+    cmds: ['{{.PY}} -m pytest -m ollama -q -rs']

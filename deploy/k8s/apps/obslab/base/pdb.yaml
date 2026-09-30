@@ -1,0 +1,10 @@
+# With two replicas, keep at least one serving during voluntary disruptions (drain, upgrades).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: obslab-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: obslab-api

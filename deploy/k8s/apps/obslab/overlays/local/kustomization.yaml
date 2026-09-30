@@ -1,0 +1,14 @@
+# Local (k3d) environment of the RAG, with real models served by Ollama on the host.
+# Another environment gets its own overlay (registry, config, replicas); the base never changes.
+#
+# The tag below is a placeholder. `task app:build` builds an image tagged with the git short SHA
+# and writes overlays/_build/ (git-ignored) on top of this overlay, so builds never dirty git.
+# Never "latest": a tag must identify one build.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: obslab
+    newName: obslab-registry.localhost:5001/obslab   # k3d >= 5.9: no "k3d-" prefix
+    newTag: dev
