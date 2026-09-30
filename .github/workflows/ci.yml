@@ -36,6 +36,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          save-cache: false          # the test job saves the same uv cache; one writer is enough
       - uses: go-task/setup-task@v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
