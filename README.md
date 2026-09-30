@@ -1,5 +1,7 @@
 # llm-observability-lab
 
+[![CI](https://github.com/jmiliamine/llm-observability-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/jmiliamine/llm-observability-lab/actions/workflows/ci.yml)
+
 A RAG over your own notes, built with LangGraph, instrumented with the
 [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/),
 and observed with Prometheus, Tempo, Loki and Grafana. The notes are searched with pgvector.

@@ -1,0 +1,57 @@
+# Checks every push and pull request with the same Task commands used locally.
+# The cluster suites (test:k8s, test:stack) need k3d and ~4 GB: they stay local for now.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: lint + unit + integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: arduino/setup-task@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: task setup
+      - run: task lint             # ruff, generated files in sync, Kustomize overlays render
+      - run: task test             # offline: outbound network blocked
+
+  pgvector:
+    name: pgvector store and guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: arduino/setup-task@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: task setup
+      - run: task test:pgvector    # starts the Compose PostgreSQL service, fails if it is not reachable
+
+  secrets:
+    name: secret scan (full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # The gitleaks CLI in its pinned image: scans every commit, needs no token or API access.
+      - name: gitleaks
+        run: >
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1
+          git /repo --redact --no-banner --exit-code 1
