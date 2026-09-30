@@ -1,0 +1,122 @@
+# open-telemetry/opentelemetry-collector 0.173.1 (collector 0.160) — the telemetry gateway.
+# Apps send OTLP to otel-collector.observability:4318; the collector enriches, batches and
+# routes: metrics -> Prometheus (scraped via ServiceMonitor), traces -> Tempo, logs -> Loki.
+# Same role as in the compose stack, same app code; only this file changes per environment.
+mode: deployment                   # a gateway; pod log collection would add a DaemonSet agent
+fullnameOverride: otel-collector   # stable Service name: otel-collector.observability
+
+image:
+  repository: otel/opentelemetry-collector-contrib   # contrib = spanmetrics, k8sattributes, loki OTLP...
+
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {memory: 384Mi}          # GOMEMLIMIT (80%) and memory_limiter derive from this
+
+presets:
+  # Adds the k8sattributes processor + RBAC: every span/metric/log gets k8s.namespace.name,
+  # k8s.pod.name, k8s.deployment.name... looked up from the sender's pod IP.
+  kubernetesAttributes:
+    enabled: true
+
+service:
+  type: NodePort                   # lets k3d map host :4318 to the collector (see cluster/k3d.yaml)
+
+ports:
+  otlp-http:
+    enabled: true
+    containerPort: 4318
+    servicePort: 4318
+    nodePort: 30318                # fixed, referenced by the k3d port mapping
+    protocol: TCP
+  # Keep OTLP only; Jaeger/Zipkin receivers are closed.
+  jaeger-compact: {enabled: false}
+  jaeger-thrift: {enabled: false}
+  jaeger-grpc: {enabled: false}
+  zipkin: {enabled: false}
+  metrics: {enabled: true}         # collector self-metrics (:8888), scraped too
+  promexporter:                    # the app metrics, exposed for Prometheus
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889
+    protocol: TCP
+
+serviceMonitor:
+  enabled: true
+  metricsEndpoints:
+    - port: metrics                # collector health: dropped spans, queue sizes, refused data
+      interval: 30s
+    - port: promexporter           # everything the apps sent
+      interval: 15s
+      honorLabels: true            # keep the app's own labels (job/instance from resource attributes)
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus: null               # self-metrics are scraped by Prometheus instead
+    otlp:
+      protocols:
+        grpc: {endpoint: "${env:MY_POD_IP}:4317"}
+        http: {endpoint: "${env:MY_POD_IP}:4318"}
+
+  processors:
+    batch:
+      send_batch_size: 1024
+      timeout: 5s
+    # Cardinality guard for METRICS only (ADR 0007). resource_to_telemetry_conversion turns every
+    # resource attribute into a Prometheus label; these ones change at every rollout or restart
+    # and only duplicate information (pod uid, start time, replicaset uid, cluster uid).
+    # k8s.pod.name / service.instance.id are KEPT on purpose: they are the per-replica identity;
+    # without them two replicas would write the same series and overwrite each other's counters.
+    # Traces and logs keep everything: that is where per-pod detail belongs.
+    resource/metric-labels:
+      attributes:
+        - {key: k8s.pod.uid, action: delete}
+        - {key: k8s.pod.start_time, action: delete}
+        - {key: k8s.pod.ip, action: delete}
+        - {key: k8s.replicaset.uid, action: delete}
+        - {key: k8s.replicaset.name, action: delete}
+        - {key: k8s.deployment.uid, action: delete}
+        - {key: k8s.cluster.uid, action: delete}
+
+  connectors:
+    # RED metrics computed from spans (calls, errors, duration per span name + dimensions).
+    spanmetrics:
+      histogram:
+        explicit:
+          buckets: [10ms, 40ms, 160ms, 640ms, 1.28s, 2.56s, 5.12s, 10.24s, 20.48s, 40.96s]
+      dimensions:
+        - name: gen_ai.operation.name
+        - name: gen_ai.request.model
+        - name: langgraph.node
+      exemplars: {enabled: true}
+      metrics_flush_interval: 15s
+
+  exporters:
+    debug: null
+    prometheus:
+      endpoint: "${env:MY_POD_IP}:8889"
+      enable_open_metrics: true    # exemplars (trace ids) on histograms
+      resource_to_telemetry_conversion:
+        enabled: true              # service.name, k8s.pod.name... become labels
+    otlp/tempo:
+      endpoint: tempo.observability:4317
+      tls: {insecure: true}        # in-cluster plain text; a service mesh or cert-manager would add mTLS
+    otlphttp/loki:
+      endpoint: http://loki.observability:3100/otlp
+
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]     # the preset inserts k8sattributes first
+        exporters: [otlp/tempo, spanmetrics]
+      metrics:
+        receivers: [otlp, spanmetrics]
+        # the preset inserts k8sattributes first; then drop the high-churn labels (above)
+        processors: [memory_limiter, resource/metric-labels, batch]
+        exporters: [prometheus]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]     # the preset inserts k8sattributes first
+        exporters: [otlphttp/loki]

@@ -1,0 +1,717 @@
+{
+  "uid": "obslab-rag",
+  "title": "LLM / RAG overview",
+  "tags": [
+    "llm",
+    "rag",
+    "opentelemetry"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Service health (RED)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Questions / s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "rag:requests:rate5m",
+          "legendFormat": "workflow",
+          "refId": "A",
+          "exemplar": false
+        },
+        {
+          "expr": "sum(rate(http_server_request_duration_seconds_count[$__rate_interval]))",
+          "legendFormat": "http",
+          "refId": "B",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Error ratio",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "rag:errors:ratio5m",
+          "legendFormat": "errors",
+          "refId": "A",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "p95 end-to-end latency",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "rag:latency:p95_5m",
+          "legendFormat": "p95",
+          "refId": "A",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Fallback ratio (no context)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "rag:fallback:ratio15m",
+          "legendFormat": "fallback",
+          "refId": "A",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Workflow latency percentiles",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(gen_ai_invoke_workflow_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gen_ai_invoke_workflow_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "B",
+          "exemplar": true
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(gen_ai_invoke_workflow_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p99",
+          "refId": "C",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency per LangGraph node (p95)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, langgraph_node) (rate(rag_graph_node_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "{{langgraph_node}}",
+          "refId": "A",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Model calls (OpenTelemetry GenAI conventions)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "LLM / embeddings duration p95",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, gen_ai_operation_name, gen_ai_request_model) (rate(gen_ai_client_operation_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "{{gen_ai_operation_name}} {{gen_ai_request_model}}",
+          "refId": "A",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Time to first chunk",
+      "description": "What the user feels before text starts streaming.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(gen_ai_client_operation_time_to_first_chunk_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gen_ai_client_operation_time_to_first_chunk_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "B",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Tokens / s",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (gen_ai_request_model) (rate(gen_ai_client_inference_usage_input_tokens_total[$__rate_interval]))",
+          "legendFormat": "in {{gen_ai_request_model}}",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "expr": "sum by (gen_ai_request_model) (rate(gen_ai_client_inference_usage_output_tokens_total[$__rate_interval]))",
+          "legendFormat": "out {{gen_ai_request_model}}",
+          "refId": "B",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Input tokens per call (p50 / p95)",
+      "description": "Prompt size: context stuffing shows up here first.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 23
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(gen_ai_client_inference_operation_input_tokens_bucket[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(gen_ai_client_inference_operation_input_tokens_bucket[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "B",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "API-equivalent cost (last 24h)",
+      "description": "Local model is free; set OBSLAB_PRICE_IN/OUT to see what the same traffic would cost on an API.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 23
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(obslab_llm_cost_usd_total[24h])) or vector(0)",
+          "legendFormat": "USD",
+          "refId": "A",
+          "exemplar": false
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Model errors / s by type",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 23
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (error_type) (rate(gen_ai_client_operation_duration_seconds_count{error_type!=\"\"}[$__rate_interval]))",
+          "legendFormat": "{{error_type}}",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "expr": "vector(0)",
+          "legendFormat": "no error",
+          "refId": "B",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Retrieval & answer quality",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Top similarity score",
+      "description": "A drop means the corpus no longer covers what people ask.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.1, sum by (le) (rate(rag_retrieval_top_score_bucket[$__rate_interval])))",
+          "legendFormat": "p10",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(rag_retrieval_top_score_bucket[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "B",
+          "exemplar": true
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(rag_retrieval_top_score_bucket[$__rate_interval])))",
+          "legendFormat": "p90",
+          "refId": "C",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Relevant documents per question (avg)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(rag_retrieval_relevant_documents_sum[$__rate_interval])) / sum(rate(rag_retrieval_relevant_documents_count[$__rate_interval]))",
+          "legendFormat": "relevant",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "expr": "sum(rate(rag_retrieval_documents_sum[$__rate_interval])) / sum(rate(rag_retrieval_documents_count[$__rate_interval]))",
+          "legendFormat": "retrieved",
+          "refId": "B",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Groundedness",
+      "description": "Share of answer words found in the retrieved context (cheap proxy for an LLM-as-judge score).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.1, sum by (le) (rate(rag_answer_groundedness_bucket[$__rate_interval])))",
+          "legendFormat": "p10",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(rag_answer_groundedness_bucket[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "B",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Query rewrites & fallbacks / min",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(rag_query_rewrites_total[$__rate_interval])) * 60",
+          "legendFormat": "rewrites",
+          "refId": "A",
+          "exemplar": true
+        },
+        {
+          "expr": "sum(rate(rag_fallbacks_total[$__rate_interval])) * 60",
+          "legendFormat": "fallbacks",
+          "refId": "B",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Application logs (click a trace_id to open the trace)",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "targets": [
+        {
+          "expr": "{service_name=\"obslab-rag\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true
+      }
+    }
+  ]
+}

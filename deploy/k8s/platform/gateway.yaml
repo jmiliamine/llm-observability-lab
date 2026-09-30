@@ -1,0 +1,78 @@
+# The single HTTP entry point of the home lab, owned by the platform.
+# Host 8080 -> k3d LB -> Traefik (entrypoint "web", container port 8000) -> this Gateway
+# -> HTTPRoutes by hostname. Every hostname is *.localhost (resolves to 127.0.0.1 in browsers).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: homelab
+  namespace: gateway
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 8000                         # must match Traefik's "web" entrypoint port
+      hostname: "*.localhost"
+      allowedRoutes:
+        namespaces:
+          from: Selector                 # only namespaces the platform opted in
+          selector:
+            matchLabels:
+              obslab.dev/gateway-access: "true"
+---
+# Platform UIs. Each route lives next to the service it exposes (monitoring/observability).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  parentRefs: [{name: homelab, namespace: gateway}]
+  hostnames: ["grafana.localhost"]
+  rules:
+    - backendRefs: [{name: kube-prometheus-stack-grafana, port: 80}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  parentRefs: [{name: homelab, namespace: gateway}]
+  hostnames: ["prometheus.localhost"]
+  rules:
+    - backendRefs: [{name: kube-prometheus-stack-prometheus, port: 9090}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  parentRefs: [{name: homelab, namespace: gateway}]
+  hostnames: ["alertmanager.localhost"]
+  rules:
+    - backendRefs: [{name: kube-prometheus-stack-alertmanager, port: 9093}]
+---
+# Read APIs of Tempo and Loki, used by the `stack` tests (Grafana talks to them in-cluster).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: tempo
+  namespace: observability
+spec:
+  parentRefs: [{name: homelab, namespace: gateway}]
+  hostnames: ["tempo.localhost"]
+  rules:
+    - backendRefs: [{name: tempo, port: 3200}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: loki
+  namespace: observability
+spec:
+  parentRefs: [{name: homelab, namespace: gateway}]
+  hostnames: ["loki.localhost"]
+  rules:
+    - backendRefs: [{name: loki, port: 3100}]

@@ -1,0 +1,18 @@
+# Public entry: http://rag.localhost:8080 -> shared Gateway -> this Service.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: obslab-api
+spec:
+  parentRefs:
+    - name: homelab
+      namespace: gateway
+  hostnames: ["rag.localhost"]
+  rules:
+    - matches:
+        - path: {type: PathPrefix, value: /}
+      backendRefs:
+        - name: obslab-api
+          port: 8000
+      timeouts:
+        request: 120s          # a local 3B model can take tens of seconds on a cold start

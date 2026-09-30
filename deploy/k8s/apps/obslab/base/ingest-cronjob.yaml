@@ -1,0 +1,58 @@
+# Re-indexing as a batch workload, separate from the API lifecycle.
+# suspend: true = never runs on schedule; `task app:ingest` triggers it on demand with
+#   kubectl create job --from=cronjob/obslab-ingest obslab-ingest-<timestamp>
+# Flip suspend to false to re-index nightly (useful when the notes change often).
+# The job embeds the notes shipped in the image and swaps the new index in atomically: the API
+# keeps answering from the previous index until the new one is complete.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: obslab-ingest
+spec:
+  schedule: "0 3 * * *"
+  suspend: true
+  concurrencyPolicy: Forbid              # never two indexers rebuilding at the same time
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 3                    # also covers a database that is still starting
+      ttlSecondsAfterFinished: 3600      # finished pods are garbage-collected after an hour
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: obslab-ingest
+        spec:
+          serviceAccountName: obslab
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: ingest
+              image: obslab                  # replaced by the overlay (registry + immutable tag)
+              args: ["ingest", "--source", "/app/corpus"]
+              envFrom:
+                - configMapRef: {name: obslab-config}
+              env:
+                # The only role allowed to write the index.
+                - {name: PGUSER, value: obslab_writer}
+                - name: PGPASSWORD
+                  valueFrom: {secretKeyRef: {name: obslab-db, key: writer-password}}
+                - name: OTEL_RESOURCE_ATTRIBUTES
+                  value: k8s.cronjob.name=obslab-ingest
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {memory: 768Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir: {sizeLimit: 64Mi}

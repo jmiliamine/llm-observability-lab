@@ -1,0 +1,34 @@
+# Non-secret configuration (12-factor): the same image runs everywhere, only this changes.
+# Secrets (an API key for a hosted model, for instance) go in a Secret, never here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: obslab-config
+data:
+  OBSLAB_PROVIDER: ollama
+  OBSLAB_CHAT_MODEL: llama3.2:3b
+  OBSLAB_EMBED_MODEL: nomic-embed-text
+  # ExternalName Service (see ollama.yaml), called by its FULL name on purpose: an ExternalName
+  # does not rewrite the Host header, and Ollama rejects unknown hosts with 403 (DNS-rebinding
+  # protection). It accepts *.local and *.internal, so "...svc.cluster.local" passes, "ollama" does not.
+  OLLAMA_BASE_URL: http://ollama.obslab.svc.cluster.local:11434
+  OBSLAB_TELEMETRY: otlp
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability:4318
+  OTEL_SERVICE_NAME: obslab-rag
+  OBSLAB_ENVIRONMENT: k3d
+  # Vector store: PostgreSQL + pgvector in this namespace. Standard libpq variables; each workload
+  # adds its own PGUSER/PGPASSWORD from the obslab-db Secret (reader for the API, writer for ingest).
+  OBSLAB_VECTOR_STORE: pgvector
+  PGHOST: postgres
+  PGPORT: "5432"
+  PGDATABASE: obslab
+  PGCONNECT_TIMEOUT: "3"
+  OBSLAB_DB_TIMEOUT_MS: "5000"                               # statement timeout on vector queries
+  OBSLAB_TOP_K: "4"
+  OBSLAB_MIN_SCORE: "0.6"                                      # calibrated for nomic-embed-text (fake overlay: 0.2)
+  # API-equivalent cost, in USD per 1M tokens, at the list price of a small hosted model: the local
+  # model is free, this shows what the same traffic would cost on an API.
+  OBSLAB_PRICE_IN: "1"
+  OBSLAB_PRICE_OUT: "5"
+  OBSLAB_CAPTURE_CONTENT: "false"                              # prompts/answers stay off traces (ADR 0007)
+  OTEL_SEMCONV_STABILITY_OPT_IN: http                          # stable HTTP metric names

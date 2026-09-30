@@ -1,0 +1,36 @@
+# Namespaces = ownership + security boundaries, like teams in a small company:
+#   gateway        platform team: the shared entry point (Gateway)
+#   monitoring     platform team: Prometheus Operator, Prometheus, Alertmanager, Grafana
+#   observability  platform team: OTel Collector, Tempo, Loki (telemetry pipeline + stores)
+#   obslab         app team: the RAG (defined in deploy/k8s/apps/obslab)
+#
+# Pod Security Admission (built into Kubernetes, replaces PodSecurityPolicy):
+#   enforce = what is rejected, warn/audit = what is reported. "restricted" is the target
+#   for everything we write; "privileged" only where a component truly needs host access
+#   (node-exporter reads the host's /proc and /sys).
+# The label obslab.dev/gateway-access decides which namespaces may attach HTTPRoutes to
+# the shared Gateway (least privilege for the entry point).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    pod-security.kubernetes.io/enforce: privileged   # node-exporter: hostNetwork/hostPID/hostPath
+    pod-security.kubernetes.io/warn: baseline
+    obslab.dev/gateway-access: "true"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted      # shows what third-party charts still miss
+    obslab.dev/gateway-access: "true"

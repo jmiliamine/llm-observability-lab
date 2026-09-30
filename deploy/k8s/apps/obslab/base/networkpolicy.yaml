@@ -1,0 +1,32 @@
+# Zero-trust baseline for incoming traffic: nothing reaches pods in this namespace unless
+# allowed below. k3s enforces NetworkPolicy natively (embedded network policy controller).
+# Egress stays open for now: Ollama is outside the cluster, reached through the Docker host, and
+# an egress allow-list for it depends on the host network (see docs/adr/0012).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# Only the Gateway (Traefik, in kube-system) may call the API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-to-api
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: obslab-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - port: 8000

@@ -1,0 +1,27 @@
+# Same cluster, no GPU and no Ollama: the app uses its deterministic fake models (docs/adr/0015).
+# Everything else is identical to `local`: Gateway, probes, telemetry, dashboards, SLO rules.
+# Answers are extracts of the notes rather than generated text, but every span, metric and log
+# line has the same shape as with a real model.
+#
+#   task up OVERLAY=fake
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../local
+patches:
+  - target: {kind: ConfigMap, name: obslab-config}
+    patch: |-
+      - op: replace
+        path: /data/OBSLAB_PROVIDER
+        value: fake
+      # Scores of the hashing embeddings are lower than nomic's: 0.2 separates in-domain questions
+      # (>= 0.22 on samples/notes) from off-topic ones (< 0.15). See tests/unit/test_sample_corpus.py.
+      - op: replace
+        path: /data/OBSLAB_MIN_SCORE
+        value: "0.2"
+      - op: replace
+        path: /data/OBSLAB_CHAT_MODEL
+        value: fake-chat
+      - op: replace
+        path: /data/OBSLAB_EMBED_MODEL
+        value: fake-embed

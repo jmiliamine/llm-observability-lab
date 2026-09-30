@@ -1,0 +1,156 @@
+# kube-prometheus-stack 91.5.1 — Prometheus Operator, Prometheus, Alertmanager, Grafana,
+# kube-state-metrics, node-exporter. Installed in namespace "monitoring" by `task platform:up`.
+#
+# Why the Operator (docs/adr/0010): it is how most companies run Prometheus on Kubernetes.
+# Scrape targets and alert rules become Kubernetes objects (ServiceMonitor, PrometheusRule)
+# that each team ships next to its app, instead of one central prometheus.yml.
+#
+# Sizing: numbers below fit a 2-core / 10 GB Docker VM. Requests = what the scheduler
+# reserves; memory limits = OOM guard. No CPU limits on purpose: CPU limits cause throttling
+# even when the node is idle; requests already give fair sharing (2026 common practice).
+
+# ── k3s specifics ──────────────────────────────────────────────────────────────
+# k3s runs scheduler, controller-manager, proxy and etcd inside one process with metrics on
+# 127.0.0.1: these scrape jobs would only fail and fire "target down" alerts.
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
+kubeEtcd: {enabled: false}
+
+defaultRules:
+  create: true
+  rules:
+    # The matching components are not scraped (see above) or do not exist in k3d.
+    etcd: false
+    kubeControllerManager: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeProxy: false
+    windows: false
+
+# ── Prometheus ─────────────────────────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    # Pick up ServiceMonitors / PodMonitors / PrometheusRules from every namespace, without
+    # requiring the Helm release label (otherwise app teams must know the release name).
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    scrapeInterval: 15s
+    evaluationInterval: 30s
+    retention: 3d               # a lab: recent data matters, disk does not grow unbounded
+    retentionSize: 1500MB       # hard cap below the PVC size
+    enableFeatures:
+      - exemplar-storage        # keep exemplars (trace ids attached to histogram samples)
+    resources:
+      requests: {cpu: 100m, memory: 512Mi}
+      limits: {memory: 1Gi}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests: {storage: 2Gi}
+
+# ── Alertmanager ───────────────────────────────────────────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 96Mi}
+  # Default receiver drops notifications: plug a real channel here (ntfy, e-mail, Slack...).
+  config:
+    route:
+      receiver: "null"
+      group_by: [alertname, namespace]
+      routes:
+        - matchers: ['alertname = "Watchdog"']   # the always-firing heartbeat alert
+          receiver: "null"
+    receivers:
+      - name: "null"
+
+# ── Grafana ────────────────────────────────────────────────────────────────────
+grafana:
+  # Admin credentials come from a Secret created by `task platform:up` (random password,
+  # printed by `task grafana:password`) — never a default password in values.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  # Grafana 13 idles around 150 MB and goes past 400 MB while Explore and dashboards run Loki and
+  # Prometheus queries. 768Mi leaves headroom; a restart replays the SQLite migrations.
+  resources:
+    requests: {cpu: 20m, memory: 256Mi}
+    limits: {memory: 768Mi}
+  # A first install pulls a ~460 MB image and runs ~800 SQLite migrations: allow more than the
+  # default 600 s before the Deployment counts as stuck.
+  progressDeadlineSeconds: 1200
+  persistence:
+    enabled: false              # dashboards and datasources are code; nothing to keep
+  grafana.ini:
+    analytics: {reporting_enabled: false, check_for_updates: false}
+    server:
+      root_url: http://grafana.localhost:8080
+    # SQLite in WAL mode: with the default journal each of the ~800 first-start migrations waits
+    # for an fsync, which is slow on a Docker Desktop virtual disk.
+    database:
+      wal: true
+  # First start = migrations: give them time before the liveness probe may restart the pod.
+  livenessProbe:
+    httpGet: {path: /api/health, port: 3000}
+    initialDelaySeconds: 300
+    periodSeconds: 20
+    failureThreshold: 6
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL                   # teams ship dashboards as ConfigMaps next to their app
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+    datasources:
+      # Exemplar -> trace link on the Prometheus datasource (uid "prometheus" is what the dashboard uses).
+      exemplarTraceIdDestinations:
+        datasourceUid: tempo
+        traceIdLabelName: trace_id
+  additionalDataSources:
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      url: http://tempo.observability:3200
+      jsonData:
+        tracesToLogsV2: {datasourceUid: loki, filterByTraceID: true, spanStartTimeShift: -5m, spanEndTimeShift: 5m}
+        tracesToMetrics: {datasourceUid: prometheus}
+        serviceMap: {datasourceUid: prometheus}
+        nodeGraph: {enabled: true}
+    - name: Loki
+      uid: loki
+      type: loki
+      url: http://loki.observability:3100
+      jsonData:
+        derivedFields:
+          - name: trace_id
+            matcherType: label
+            matcherRegex: trace_id
+            datasourceUid: tempo
+            url: "$${__value.raw}"
+
+# ── Exporters ──────────────────────────────────────────────────────────────────
+kube-state-metrics:
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 96Mi}
+prometheus-node-exporter:
+  resources:
+    requests: {cpu: 10m, memory: 16Mi}
+    limits: {memory: 48Mi}
+prometheusOperator:
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 160Mi}
+  admissionWebhooks:
+    patch:
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
