@@ -44,7 +44,7 @@ class HashingEmbeddings(Embeddings):
     """Bag-of-words hashed into a fixed vector: texts sharing topic words get similar vectors.
 
     Crude on purpose (no model download, deterministic), but good enough for the demo corpus:
-    on samples/notes every load-test question retrieves its note with a score >= 0.22, while
+    on the sample notes every load-test question retrieves its note with a score >= 0.22, while
     off-topic questions stay under 0.15 (hence OBSLAB_MIN_SCORE=0.2 in fake mode).
     """
 

@@ -23,6 +23,11 @@ ranking as the in-memory store, a read-only API role, a re-index that readers ne
 done, an index from another embedding model refused, slow queries cut off, a pool that recovers
 after the database drops its connections.
 
+**Data lake** (`e2e/test_datalake.py`, same command). Runs the real `obslab ingest` on a copy of
+the sample notes: a note added to the folder is answered after the next ingest, a removed note
+is forgotten, files that are not `.md` or `.txt` are ignored, and an empty or missing folder
+fails without touching the index that is being served.
+
 **Compose end to end** (`e2e/test_stack.py`). Starts Prometheus, Tempo, Loki, Grafana, the
 OpenTelemetry Collector and PostgreSQL with Docker Compose, indexes the sample notes, then asks
 one question and follows it:
@@ -37,7 +42,9 @@ runs with the fake provider.
 
 **Cluster end to end** (`e2e/test_cluster.py`, plus `test_stack.py` against the cluster). The
 same question through the Gateway: both API replicas answer, the trace carries the pod
-identity, metric labels stay bounded, the SLO rules are evaluated.
+identity, metric labels stay bounded, the SLO rules are evaluated. A note added to the data lake
+is served after the ingest job, with the same image and the same API pods, and only that job
+mounts the folder.
 
 **Real models** (`e2e/test_ollama.py`). With `llama3.2:3b` and `nomic-embed-text`: a question
 about the notes is answered from the right note, an off-topic question is declined.

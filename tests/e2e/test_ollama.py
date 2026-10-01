@@ -1,7 +1,7 @@
 """The RAG with the real local models: nomic-embed-text for retrieval, llama3.2:3b for answers.
 
 Checks what the fakes cannot: the calibrated threshold (OBSLAB_MIN_SCORE=0.6) still separates
-in-domain from off-topic questions on samples/notes, and the model answers from the context.
+in-domain from off-topic questions on the sample notes, and the model answers from the context.
 Run with `task test:ollama` (Ollama running, both models pulled). Telemetry is not exported.
 """
 
@@ -14,7 +14,7 @@ from lab_http import is_up, unavailable
 
 pytestmark = pytest.mark.ollama
 
-NOTES = Path(__file__).resolve().parents[2] / "samples" / "notes"
+NOTES = Path(__file__).resolve().parents[2] / "datalake"
 
 
 @pytest.fixture(scope="module")

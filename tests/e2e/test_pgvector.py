@@ -19,7 +19,7 @@ pytestmark = pytest.mark.pgvector
 
 WRITER = os.environ.get("PG_WRITER_DSN", "postgresql://obslab_writer:writer-local@127.0.0.1:5432/obslab")
 READER = os.environ.get("PG_READER_DSN", "postgresql://obslab_reader:reader-local@127.0.0.1:5432/obslab")
-NOTES = Path(__file__).resolve().parents[2] / "samples" / "notes"
+NOTES = Path(__file__).resolve().parents[2] / "datalake"
 META = {"provider": "fake", "embed_model": "fake-embed"}
 QUESTIONS = {
     "How do taints and tolerations work?": "kubernetes/taints-and-tolerations.md",

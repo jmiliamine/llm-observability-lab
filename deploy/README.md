@@ -35,7 +35,8 @@ the models.
 |---|---|
 | `base/deployment.yaml`, `service.yaml`, `httproute.yaml`, `pdb.yaml` | the API: two replicas behind the Gateway |
 | `base/postgres.yaml` | PostgreSQL + pgvector, its Service and its NetworkPolicy |
-| `base/ingest-cronjob.yaml` | the job that (re)builds the index |
+| `base/ingest-cronjob.yaml` | the job that (re)builds the index from the data lake |
+| `base/datalake.yaml` | the data lake: the host folder of notes as a read-only volume, for the ingest job only |
 | `base/configmap.yaml` | all the non-secret settings |
 | `base/ollama.yaml` | a cluster name for Ollama running on the host |
 | `base/networkpolicy.yaml`, `namespace.yaml`, `serviceaccount.yaml` | isolation and pod security |

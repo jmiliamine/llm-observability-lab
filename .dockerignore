@@ -1,11 +1,9 @@
-# Keep the build context small and secret-free. `task app:build` stages the notes to index
-# in build/corpus/ first, so any folder of notes can go into the image.
+# Keep the build context small and secret-free: the code and what the package build needs.
 **
 !pyproject.toml
 !uv.lock
 !README.md
 !LICENSE
 !src/**
-!build/corpus/**
 **/__pycache__
 **/*.pyc

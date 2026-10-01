@@ -1,5 +1,5 @@
 """The demo corpus and the load generator must agree: every in-domain question of `obslab load`
-is answered from samples/notes in fake mode, and off-topic questions fall back. If a note is
+is answered from the sample notes (datalake/) in fake mode, and off-topic questions fall back. If a note is
 removed or a question changed, this fails before the cluster demo shows only fallbacks."""
 
 from pathlib import Path
@@ -12,7 +12,7 @@ from obslab.cli import QUESTIONS_IN, QUESTIONS_OFF
 from obslab.rag import corpus
 from obslab.rag.providers import HashingEmbeddings
 
-NOTES = Path(__file__).resolve().parents[2] / "samples" / "notes"
+NOTES = Path(__file__).resolve().parents[2] / "datalake"
 
 
 @pytest.fixture(scope="module")

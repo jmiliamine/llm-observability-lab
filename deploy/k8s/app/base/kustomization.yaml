@@ -14,6 +14,7 @@ resources:
   - ollama.yaml
   - postgres-init.generated.yaml     # from deploy/shared/postgres (task gen)
   - postgres.yaml
+  - datalake.yaml
   - ingest-cronjob.yaml
   - deployment.yaml
   - pdb.yaml

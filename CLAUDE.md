@@ -49,7 +49,7 @@ and asks for confirmation. Do not run it without the user's explicit request.
   log a connection string with a password; connection settings come from the `PG*` variables.
   Database passwords live in the `obslab-db` Secret (`task db:secret`, generated, never printed).
 - A new component or trade-off gets a short paragraph in `docs/architecture.md` (Design choices).
-- If you change `samples/notes/` or the questions in `src/obslab/cli.py`, run `task test`:
+- If you change the sample notes in `datalake/` or the questions in `src/obslab/cli.py`, run `task test`:
   `tests/unit/test_sample_corpus.py` checks that every load-test question is still answered.
 
 ## Before you finish

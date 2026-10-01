@@ -57,6 +57,13 @@ disagree, usually because the Secret was recreated after the database volume was
 Either restore the old Secret, or delete both (`kubectl -n obslab delete secret obslab-db` and
 `kubectl -n obslab delete pvc data-postgres-0`, which deletes the index) and run `task app`.
 
+**The ingest job stays in `ContainerCreating`, or fails with "no .md/.txt notes".** The job
+reads the data lake, a host folder mounted into the nodes when the cluster was created.
+`kubectl -n obslab describe pod -l app.kubernetes.io/name=obslab-ingest` shows a hostPath error
+when the nodes have no such mount: the cluster predates the data lake or was created by hand.
+Recreate it with `task cluster:down` and `task up DATALAKE=...`. When the job runs but finds no
+notes, the folder is empty or holds no `.md` or `.txt` file; the previous index keeps serving.
+
 **Inspect the index.** `kubectl -n obslab exec -it postgres-0 -- psql -U postgres -d obslab`,
 then `SELECT * FROM rag.index_meta;` or `SELECT source, count(*) FROM rag.chunks GROUP BY 1;`.
 
