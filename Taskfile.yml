@@ -112,7 +112,9 @@ tasks:
       - helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update
       - helm repo update
       # --wait: the next step only runs once the component is Ready (CRDs exist, pods up).
-      - helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --version {{.KPS_VERSION}} -n monitoring -f {{.VALUES}}/kube-prometheus-stack.yaml --wait --timeout 10m
+      # The first one gets a long timeout: on a fresh cluster Grafana pulls ~460 MB and runs its
+      # first-start migrations, which can take 15 minutes on a slow disk.
+      - helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --version {{.KPS_VERSION}} -n monitoring -f {{.VALUES}}/kube-prometheus-stack.yaml --wait --timeout 25m
       - helm upgrade --install loki grafana-community/loki --version {{.LOKI_VERSION}} -n observability -f {{.VALUES}}/loki.yaml --wait --timeout 10m
       - helm upgrade --install tempo grafana-community/tempo --version {{.TEMPO_VERSION}} -n observability -f {{.VALUES}}/tempo.yaml --wait --timeout 10m
       - helm upgrade --install otel-collector open-telemetry/opentelemetry-collector --version {{.OTEL_VERSION}} -n observability -f {{.VALUES}}/otel-collector.yaml --wait --timeout 5m
