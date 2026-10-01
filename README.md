@@ -30,7 +30,7 @@ question you can see how long each step took, how many tokens it used, why it en
 
 ## Architecture
 
-![A question goes through the Gateway to the RAG API. The API searches the pgvector index in PostgreSQL, calls Ollama for embeddings and answers, and sends traces, metrics and logs to the OpenTelemetry Collector, which forwards them to Tempo, Loki and Prometheus. Grafana reads all three.](docs/img/architecture.svg)
+![A question goes through the Gateway to the RAG API. The API searches the pgvector index in PostgreSQL, calls Ollama for embeddings and answers, and sends traces, metrics and logs to the OpenTelemetry Collector, which forwards them to Tempo, Loki and Prometheus. Grafana reads all three. The ingest job reads the notes from the data lake, a host folder mounted read-only, and writes the index.](docs/img/architecture.svg)
 
 More detail, including what each namespace owns and how a request is traced, in
 [docs/architecture.md](docs/architecture.md).
