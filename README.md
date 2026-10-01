@@ -22,13 +22,13 @@ question you can see how long each step took, how many tokens it used, why it en
   and the ingest job rebuilds the index and swaps it in atomically. An index built with another
   embedding model is refused.
 - **The telemetry.** One trace per question, from the HTTP request down to each model call,
-  named after the GenAI conventions (`chat llama3.2:3b`, `gen_ai.client.token.usage`...).
+  named after the GenAI conventions (`chat llama3.2:3b`, `gen_ai.client.operation.duration`...).
   Prompts stay off the traces unless you opt in.
 
   ![One question as a trace in Tempo: the HTTP request, the LangGraph nodes, the embedding call and the llama3.2:3b call](docs/img/trace.png)
 - **The platform.** kube-prometheus-stack, Tempo, Loki and the OpenTelemetry Collector
   from pinned Helm charts, Traefik as the Gateway API implementation, a local image registry.
-- **The operations side.** SLO recording rules, multi-window burn-rate alerts,
+- **The operations side.** SLO recording rules and alerts,
   a dashboard generated from code, liveness and readiness probes that answer different
   questions.
 
