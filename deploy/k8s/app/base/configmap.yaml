@@ -18,7 +18,6 @@ data:
   OBSLAB_ENVIRONMENT: k3d
   # Vector store: PostgreSQL + pgvector in this namespace. Standard libpq variables; each workload
   # adds its own PGUSER/PGPASSWORD from the obslab-db Secret (reader for the API, writer for ingest).
-  OBSLAB_VECTOR_STORE: pgvector
   PGHOST: postgres
   PGPORT: "5432"
   PGDATABASE: obslab
