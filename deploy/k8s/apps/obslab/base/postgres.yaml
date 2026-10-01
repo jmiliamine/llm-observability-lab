@@ -1,4 +1,4 @@
-# PostgreSQL + pgvector: the vector store of the RAG (docs/adr/0008). Owned by the app team,
+# PostgreSQL + pgvector: the vector store of the RAG. Owned by the app team,
 # like the rest of this namespace; a managed PostgreSQL with the pgvector extension replaces it
 # as is (the app only needs the PG* connection variables).
 #

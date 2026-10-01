@@ -33,7 +33,7 @@ and asks for confirmation. Do not run it without the user's explicit request.
 - Metric and span names follow the OpenTelemetry GenAI conventions and are defined only in
   `src/obslab/telemetry/genai.py`.
 - Never add unbounded metric attributes (question text, ids, pod UIDs). Content goes on spans
-  only, behind `OBSLAB_CAPTURE_CONTENT` (off by default). See `docs/adr/0007`.
+  only, behind `OBSLAB_CAPTURE_CONTENT` (off by default).
 - Dashboard and SLO rules: edit `scripts/gen_observability.py` or `deploy/shared/`, then run
   `task gen`. Never edit `deploy/k8s/platform/generated/` or the dashboard JSON by hand;
   `task lint` fails when they are out of sync.
@@ -41,14 +41,14 @@ and asks for confirmation. Do not run it without the user's explicit request.
   `deploy/k8s/platform/values/`); app = Kustomize in `deploy/k8s/apps/obslab` (overlays
   `local` and `fake`; `_build` is generated and git-ignored). Every manifest explains *why*
   in comments; keep that.
-- Security baseline (`docs/adr/0012`): restricted Pod Security, non-root, read-only root
+- Security baseline: restricted Pod Security, non-root, read-only root
   filesystem, requests on every container, memory limits, no CPU limits.
-- Vector store (`docs/adr/0008`): PostgreSQL + pgvector, code in `src/obslab/rag/pgvector.py`.
+- Vector store: PostgreSQL + pgvector, code in `src/obslab/rag/pgvector.py`.
   The API uses the read-only role, only the ingest job writes. Keep SQL parameterized, table
   names constant, and every guardrail covered by `tests/e2e/test_pgvector.py`. Never print or
   log a connection string with a password; connection settings come from the `PG*` variables.
   Database passwords live in the `obslab-db` Secret (`task db:secret`, generated, never printed).
-- A new component or trade-off gets a short ADR in `docs/adr/` with the alternatives weighed.
+- A new component or trade-off gets a short paragraph in `docs/architecture.md` (Design choices).
 - If you change `samples/notes/` or the questions in `src/obslab/cli.py`, run `task test`:
   `tests/unit/test_sample_corpus.py` checks that every load-test question is still answered.
 

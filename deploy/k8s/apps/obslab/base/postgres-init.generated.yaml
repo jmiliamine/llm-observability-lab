@@ -9,7 +9,7 @@ data:
     # First-start initialisation of the vector database (run once by the postgres image entrypoint,
     # from /docker-entrypoint-initdb.d, when the data directory is empty). Shared by compose and k8s.
     #
-    # Least privilege (docs/adr/0008):
+    # Least privilege:
     #   obslab_writer  owns schema `rag`; used only by the ingest job to rebuild the index
     #   obslab_reader  SELECT on `rag` only; used by the API, which can therefore never alter the index
     # Nobody but the superuser can create objects in `public`.
