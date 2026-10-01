@@ -47,7 +47,9 @@ def test_validation_and_provider_errors(components, otel):
 
 
 def test_not_ready_when_the_index_was_built_with_another_model(components):
-    components.index_error = "index built with embed model 'fake-embed', but 'nomic-embed-text' is configured"
+    components.status = lambda: {
+        "ready": False, "store": "pgvector", "provider": "ollama", "chunks": 3,
+        "error": "index built with embed model 'fake-embed', but 'nomic-embed-text' is configured"}
     client = TestClient(create_app(components))
     r = client.get("/readyz")
     assert r.status_code == 503

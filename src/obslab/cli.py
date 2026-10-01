@@ -49,7 +49,7 @@ def _components(settings=None, telemetry=None):
 
 def cmd_ingest(a) -> int:
     from .config import Settings
-    from .rag import corpus, index
+    from .rag import corpus, pgvector
     from .rag.providers import embeddings
     from .telemetry import GenAIMetrics, init_telemetry
     settings = Settings()
@@ -61,18 +61,11 @@ def cmd_ingest(a) -> int:
     meta = {"provider": settings.provider, "embed_model": settings.embed_model_id}
     emb = embeddings(settings, tel, GenAIMetrics(tel.meter))
     start = time.perf_counter()
-    with tel.tracer.start_as_current_span("ingest", attributes={"obslab.chunks": len(docs),
-                                                                "obslab.vector_store": settings.vector_store}):
-        if settings.vector_store == "pgvector":
-            from .rag import pgvector
-            with pgvector.open_pool(name="obslab-ingest") as pool:
-                pgvector.rebuild(pool, docs, emb, meta)
-            target = "PostgreSQL (rag.chunks)"
-        else:
-            index.build(docs, emb, settings.index_path, meta=meta)
-            target = str(settings.index_path)
+    with tel.tracer.start_as_current_span("ingest", attributes={"obslab.chunks": len(docs)}):
+        with pgvector.open_pool(name="obslab-ingest") as pool:
+            pgvector.rebuild(pool, docs, emb, meta)
     tel.shutdown()
-    print(f"indexed {len(docs)} chunks in {time.perf_counter() - start:.1f}s -> {target}")
+    print(f"indexed {len(docs)} chunks in {time.perf_counter() - start:.1f}s -> PostgreSQL (rag.chunks)")
     return 0
 
 

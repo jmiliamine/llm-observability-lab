@@ -108,8 +108,8 @@ change on each rollout from metrics, while traces and logs keep them. Prompts an
 only recorded on spans when `OBSLAB_CAPTURE_CONTENT=true`.
 
 **PostgreSQL + pgvector.** The index is shared, so the API is stateless: two replicas, rolling
-updates without downtime, re-indexing without a restart. An in-memory store remains for offline
-tests.
+updates without downtime, re-indexing without a restart. It is the only copy of the index: nothing is kept in a local file. The unit tests replace it
+with an in-memory double.
 
 **k3d for the cluster.** k3s in Docker gives a real control-plane and worker split for about
 500 MB per node, with Traefik, storage and a load balancer included. `task stop` gives the

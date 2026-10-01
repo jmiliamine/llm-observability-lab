@@ -13,7 +13,6 @@ obslab/
 │   ├── graph.py          the LangGraph flow: retrieve, rewrite, generate, fallback, grade
 │   ├── providers.py      models: Ollama, or deterministic fakes for tests
 │   ├── pgvector.py       vector store on PostgreSQL (search for the API, rebuild for the ingest job)
-│   ├── index.py          in-memory vector store, for offline tests
 │   └── corpus.py         loads a folder of notes and splits it into chunks
 └── telemetry/
     ├── setup.py          OpenTelemetry providers and exporters (traces, metrics, logs)
