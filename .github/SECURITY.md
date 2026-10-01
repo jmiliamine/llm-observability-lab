@@ -19,6 +19,22 @@ What it does take care of:
 - Your notes stay on your machine: they are copied into a local image and a local database,
   and the models run locally.
 
+## What is checked automatically
+
+`task scan` runs the same checks as CI, each failing on a finding:
+
+| Check | Tool | Scope |
+|---|---|---|
+| Workflow lint and audit | actionlint, zizmor | `.github/workflows/` (pinned actions, permissions, credential handling) |
+| Secrets | gitleaks | every commit |
+| Dependencies | Trivy | `uv.lock`, HIGH and CRITICAL |
+| Misconfigurations | Trivy | Dockerfile, Compose file, rendered Kubernetes manifests; accepted findings and their reasons are in `.trivyignore.yaml` |
+| Image | Trivy | the built image, fixable HIGH and CRITICAL |
+
+The image is built from `uv.lock`, gets Debian's security updates at build time and ships
+without pip. GitHub Actions are pinned to commit SHAs and the scanners to image digests;
+Dependabot proposes the updates. CI also runs weekly, so a new CVE shows up without a push.
+
 ## Reporting a vulnerability
 
 Please do not open a public issue. Send an e-mail to jmili.amine@gmail.com with the details
