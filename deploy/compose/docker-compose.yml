@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
 
   loki:
-    image: grafana/loki:3.5.3
+    image: grafana/loki:3.7.8
     command: ["-config.file=/etc/loki/config.yaml"]
     volumes:
       - ./loki.yaml:/etc/loki/config.yaml:ro
