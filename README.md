@@ -13,7 +13,7 @@ and observed with Prometheus, Tempo, Loki and Grafana. The notes are searched wi
 Everything runs in a two-node k3d cluster set up like a small company platform: Gateway API,
 pinned Helm charts, restricted pods, SLO alerts.
 
-![Grafana dashboard of the RAG: request rate, latency percentiles, tokens, retrieval scores](docs/img/dashboard.png)
+![A question asked from a terminal, then its latency, token and retrieval metrics on the Grafana dashboard, then the same question as a trace in Tempo with the token counts on the model call](docs/img/demo.gif)
 
 Most LLM demos stop at the answer. This lab is about what happens around it. For every
 question you can see how long each step took, how many tokens it used, why it ended in
@@ -103,6 +103,8 @@ task load
 
 The dashboard is in the *LLM Observability* folder. Click a point on a latency panel to jump
 to an example trace (exemplars), then from a span to its logs.
+
+![Grafana dashboard of the RAG: request rate, latency percentiles, tokens, retrieval scores](docs/img/dashboard.png)
 
 `task stop` pauses the cluster and gives the memory back; `task start` resumes it with all
 its data. `task cluster:down` deletes it.
