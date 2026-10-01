@@ -62,11 +62,13 @@ spec:
           resources:
             requests: {cpu: 50m, memory: 128Mi}
             limits: {memory: 512Mi}
+          # Probes go through TCP: during the first start the image runs a temporary server on
+          # the Unix socket only (for the init script), which must not count as ready.
           readinessProbe:
-            exec: {command: [pg_isready, -U, postgres, -d, obslab]}
+            exec: {command: [pg_isready, -h, 127.0.0.1, -U, postgres, -d, obslab]}
             periodSeconds: 5
           livenessProbe:
-            exec: {command: [pg_isready, -U, postgres, -d, obslab]}
+            exec: {command: [pg_isready, -h, 127.0.0.1, -U, postgres, -d, obslab]}
             initialDelaySeconds: 30          # the first start runs initdb and the init script
             periodSeconds: 20
             failureThreshold: 6

@@ -83,9 +83,12 @@ services:
       - postgres-data:/var/lib/postgresql
     ports: ["127.0.0.1:5432:5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d obslab"]
+      # Over TCP on purpose: during the first start the image runs a temporary server on the
+      # Unix socket only (for the init script), which must not count as ready.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d obslab"]
       interval: 5s
-      retries: 20
+      retries: 6
+      start_period: 180s     # first start: initdb, the init script, then a restart
     restart: unless-stopped
 
 volumes:

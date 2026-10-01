@@ -71,6 +71,7 @@ tasks:
       PGDATABASE: obslab
       PGUSER: obslab_writer
       PGPASSWORD: '{{.OBSLAB_WRITER_PASSWORD | default "writer-local"}}'
+      OBSLAB_PROVIDER: '{{.PROVIDER | default "ollama"}}'
     cmds: ['{{.PY}} -m obslab ingest --source "{{.NOTES}}"']
 
   # ── Cluster lifecycle ───────────────────────────────────────────────────────
@@ -210,6 +211,26 @@ tasks:
       PROM_URL: '{{if eq .TARGET "compose"}}http://localhost:9090{{else}}http://prometheus.localhost:8080{{end}}'
       TEMPO_URL: '{{if eq .TARGET "compose"}}http://localhost:3200{{else}}http://tempo.localhost:8080{{end}}'
       LOKI_URL: '{{if eq .TARGET "compose"}}http://localhost:3100{{else}}http://loki.localhost:8080{{end}}'
+    cmds: ['{{.PY}} -m pytest -m stack -q -rs']
+
+  test:compose:
+    desc: "Compose end to end: start the stack, index the sample notes into PostgreSQL, check one question's metrics, trace and logs (PROVIDER=fake|ollama)"
+    cmds:
+      - task: stack:up
+      - task: stack:ingest
+        vars: {PROVIDER: '{{.PROVIDER | default "fake"}}', NOTES: samples/notes}
+      - task: test:compose:run
+
+  test:compose:run:
+    internal: true
+    env:
+      OBSLAB_REQUIRE_STACK: "1"
+      OBSLAB_PROVIDER: '{{.PROVIDER | default "fake"}}'
+      OBSLAB_STACK_STORE: pgvector      # read the index just built, with the read-only role
+      PGHOST: 127.0.0.1
+      PGDATABASE: obslab
+      PGUSER: obslab_reader
+      PGPASSWORD: '{{.OBSLAB_READER_PASSWORD | default "reader-local"}}'
     cmds: ['{{.PY}} -m pytest -m stack -q -rs']
 
   test:k8s:
