@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="llm-observability-lab logo: a telescope looking at a graph of connected nodes">
+  <title>llm-observability-lab</title>
+  <!-- A telescope (observability) whose line of sight ends in a small graph of nodes (the RAG graph). -->
+  <g transform="rotate(-38 104 156)">
+    <!-- eyepiece -->
+    <rect x="6" y="140" width="40" height="32" rx="10" fill="#F5A800"/>
+    <!-- tube -->
+    <rect x="38" y="122" width="112" height="68" rx="14" fill="#2F7366"/>
+    <!-- front ring -->
+    <rect x="142" y="106" width="38" height="100" rx="14" fill="#F5A800"/>
+  </g>
+  <!-- mount -->
+  <rect x="84" y="212" width="16" height="38" rx="8" fill="#F5A800"/>
+  <circle cx="92" cy="198" r="24" fill="#F5A800"/>
+  <circle cx="92" cy="198" r="10" fill="#ffffff"/>
+  <!-- the graph being observed -->
+  <g stroke="#2F7366" stroke-width="8" stroke-linecap="round">
+    <line x1="198" y1="68" x2="232" y2="38"/>
+    <line x1="198" y1="68" x2="238" y2="98"/>
+    <line x1="232" y1="38" x2="238" y2="98"/>
+  </g>
+  <circle cx="198" cy="68" r="16" fill="#2F7366"/>
+  <circle cx="232" cy="38" r="13" fill="#4F62AD"/>
+  <circle cx="238" cy="98" r="13" fill="#4F62AD"/>
+</svg>
