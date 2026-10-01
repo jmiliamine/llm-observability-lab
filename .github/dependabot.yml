@@ -1,0 +1,38 @@
+# Version and security updates as pull requests, so pinned does not mean stale.
+# Each PR runs the full CI, including the image and dependency scans.
+#
+# Not covered here, bump by hand: the Helm chart versions and the scanner image digests in
+# Taskfile.yml, and the k3s image in deploy/k8s/k3d.yaml.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}       # let a new release settle before adopting it
+    groups:
+      actions: {patterns: ["*"]}
+
+  - package-ecosystem: uv             # pyproject.toml + uv.lock
+    directory: /
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups:
+      python-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker         # base image and uv image in the Dockerfile
+    directory: /
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+
+  - package-ecosystem: docker-compose
+    directory: /deploy/compose
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}
+    groups:
+      compose-images: {patterns: ["*"]}
+
+  - package-ecosystem: docker         # images referenced by the Kubernetes manifests
+    directory: /deploy/k8s/app/base
+    schedule: {interval: weekly}
+    cooldown: {default-days: 7}

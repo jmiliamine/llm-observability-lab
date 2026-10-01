@@ -24,6 +24,11 @@ vars:
   LOKI_VERSION: 18.13.5      # grafana-community/loki (Loki 3.7)
   TEMPO_VERSION: 3.0.0       # grafana-community/tempo (Tempo 3.0)
   OTEL_VERSION: 0.173.1      # open-telemetry/opentelemetry-collector (collector 0.160)
+  # Scanners run from images pinned by digest, so a scan today and in a year use the same tool.
+  TRIVY: ghcr.io/aquasecurity/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+  GITLEAKS: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+  ZIZMOR: ghcr.io/zizmorcore/zizmor:1.30.1@sha256:a2eb396d886c053073405c7a980f2139ba2248ec172243cfa3841e57196e8101
+  ACTIONLINT: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
 
 tasks:
   default:
@@ -50,6 +55,50 @@ tasks:
       - '{{.PY}} scripts/gen_observability.py --check'
       - kubectl kustomize {{.APP_DIR}}/overlays/local > /dev/null
       - kubectl kustomize {{.APP_DIR}}/overlays/fake > /dev/null
+
+  # ── Security scans (Docker only; each one fails on a finding) ───────────────
+  scan:
+    desc: All security scans (workflows, secrets, dependencies, manifests, image)
+    cmds:
+      - task: scan:workflows
+      - task: scan:secrets
+      - task: scan:deps
+      - task: scan:config
+      - task: scan:image
+
+  scan:workflows:
+    desc: Lint the GitHub Actions workflows (actionlint) and audit them (zizmor)
+    cmds:
+      - docker run --rm -v "{{.ROOT_DIR}}:/repo:ro" -w /repo {{.ACTIONLINT}} -color=false
+      - docker run --rm -v "{{.ROOT_DIR}}:/repo:ro" -w /repo {{.ZIZMOR}} --no-progress --offline .github/workflows
+
+  scan:secrets:
+    desc: Look for secrets in every commit (gitleaks)
+    cmds:
+      - docker run --rm -v "{{.ROOT_DIR}}:/repo:ro" {{.GITLEAKS}} git /repo --redact --no-banner --exit-code 1
+
+  scan:deps:
+    desc: Known vulnerabilities in the locked Python dependencies (Trivy on uv.lock)
+    cmds:
+      - docker run --rm -v "{{.ROOT_DIR}}:/repo:ro" -v obslab-trivy-cache:/root/.cache {{.TRIVY}} fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --quiet /repo/uv.lock
+
+  scan:config:
+    desc: Misconfigurations in the Dockerfile, Compose file and rendered Kubernetes manifests (Trivy)
+    cmds:
+      # Scan what is deployed: the overlays rendered by Kustomize, not the base with its placeholders.
+      - '{{.PY}} -c "import pathlib; pathlib.Path(''build/k8s'').mkdir(parents=True, exist_ok=True)"'
+      - kubectl kustomize {{.APP_DIR}}/overlays/local > build/k8s/app-local.yaml
+      - kubectl kustomize {{.APP_DIR}}/overlays/fake > build/k8s/app-fake.yaml
+      - docker run --rm -v "{{.ROOT_DIR}}:/repo:ro" -v obslab-trivy-cache:/root/.cache {{.TRIVY}} config --severity MEDIUM,HIGH,CRITICAL --exit-code 1 --quiet --ignorefile /repo/.trivyignore.yaml --skip-dirs .venv --skip-dirs {{.APP_DIR}} --skip-dirs build/corpus /repo
+
+  scan:image:
+    desc: Build the app image and scan it for fixable HIGH and CRITICAL vulnerabilities (Trivy)
+    cmds:
+      - '{{.PY}} scripts/stage_notes.py samples/notes'
+      - docker build -q -t {{.IMAGE}}:scan .
+      # Scanned from a tarball: no need to hand the Docker socket to the scanner.
+      - docker save {{.IMAGE}}:scan -o build/image-scan.tar
+      - docker run --rm -v "{{.ROOT_DIR}}/build:/build:ro" -v obslab-trivy-cache:/root/.cache {{.TRIVY}} image --input /build/image-scan.tar --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet
 
   gen:
     desc: Regenerate the dashboard and the PrometheusRule from deploy/shared (compose and k8s)

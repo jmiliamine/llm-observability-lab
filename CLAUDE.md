@@ -54,7 +54,8 @@ and asks for confirmation. Do not run it without the user's explicit request.
 
 ## Before you finish
 
-Run `task lint` and `task test`. Both must pass. Run the e2e tasks only if the infrastructure
+Run `task lint` and `task test`. Both must pass. If you touched the Dockerfile, a manifest,
+a dependency or a workflow, run `task scan` too (Docker needed). Run the e2e tasks only if the infrastructure
 is up, and say which ones you ran.
 
 ## Windows specifics

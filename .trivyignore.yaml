@@ -1,0 +1,21 @@
+# Accepted findings of `task scan:config`, each with its reason. Anything not listed fails the scan.
+misconfigurations:
+  - id: KSV-0108
+    statement: >-
+      The `ollama` Service is an ExternalName on purpose: the model server runs on the host and the
+      cluster reaches it under a cluster-native name (docs/architecture.md, "Ollama on the host").
+  - id: KSV-0109
+    statement: >-
+      False positive: the init script in the `postgres-init` ConfigMap contains `CREATE ROLE ...
+      PASSWORD :'writer_pw'`, a psql variable. The passwords come from the `obslab-db` Secret.
+  - id: KSV-01010
+    statement: >-
+      False positive: the flagged ConfigMap keys are PGPORT and OBSLAB_DB_TIMEOUT_MS, a port and a
+      timeout. Credentials are in the `obslab-db` Secret.
+  - id: KSV-0125
+    statement: >-
+      Images come from Docker Hub and ghcr.io, pinned by version; there is no private registry
+      in this lab.
+  - id: KSV-0037
+    statement: >-
+      k3s reads the Traefik HelmChartConfig from kube-system; it cannot live in another namespace.
