@@ -19,7 +19,7 @@ processors:
 
 connectors:
   # RED metrics derived from spans: works for any span, even uninstrumented code paths.
-  spanmetrics:
+  span_metrics:
     histogram:
       explicit:
         buckets: [10ms, 40ms, 160ms, 640ms, 1.28s, 2.56s, 5.12s, 10.24s, 20.48s, 40.96s]
@@ -35,12 +35,12 @@ exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
     enable_open_metrics: true              # exemplars (metric -> trace links)
-    resource_to_telemetry_conversion:
-      enabled: true                        # service.name etc. become labels
-  otlp/tempo:
+    resource_constant_labels:
+      included: ["*"]                      # resource attributes (service.name...) become labels
+  otlp_grpc/tempo:
     endpoint: tempo:4317
     tls: {insecure: true}
-  otlphttp/loki:
+  otlp_http/loki:
     endpoint: http://loki:3100/otlp
   debug:
     verbosity: basic
@@ -51,12 +51,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp/tempo, spanmetrics]
+      exporters: [otlp_grpc/tempo, span_metrics]
     metrics:
-      receivers: [otlp, spanmetrics]
+      receivers: [otlp, span_metrics]
       processors: [memory_limiter, batch]
       exporters: [prometheus]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlphttp/loki]
+      exporters: [otlp_http/loki]
