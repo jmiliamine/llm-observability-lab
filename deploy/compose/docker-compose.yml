@@ -52,7 +52,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:12.1.1
+    image: grafana/grafana:13.2.2
     environment:
       # Anonymous visitors can look (dashboards and Explore) but not change anything. To edit,
       # sign in as admin/admin (Grafana asks for a new password on first login).
