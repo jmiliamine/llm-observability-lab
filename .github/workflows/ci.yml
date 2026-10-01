@@ -1,5 +1,5 @@
 # Checks every push and pull request with the same Task commands used locally.
-# The cluster suites (test:k8s, test:stack) need k3d and ~4 GB: they stay local for now.
+# The cluster suite (test:k8s) needs k3d and ~4 GB: it stays local for now.
 name: CI
 
 on:
@@ -43,6 +43,26 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: task setup
       - run: task test:pgvector    # starts the Compose PostgreSQL service, fails if it is not reachable
+
+  compose-e2e:
+    name: compose end to end (telemetry of one question)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          save-cache: false
+      - uses: go-task/setup-task@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: task setup
+      # Starts Prometheus, Tempo, Loki, Grafana, the collector and PostgreSQL, indexes the sample
+      # notes, asks one question and checks that its metrics, trace and logs arrived.
+      - run: task test:compose
+      - name: container logs
+        if: failure()
+        run: docker compose -f deploy/compose/docker-compose.yml logs --no-color --tail 80
 
   secrets:
     name: secret scan (full history)

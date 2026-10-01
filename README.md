@@ -133,12 +133,15 @@ to `localhost:4318`, like in the cluster. `task stack:down` stops it.
 
 ## Tests
 
+The first three run in CI on every push. Details in [tests/README.md](tests/README.md).
+
 | Command | What it proves | Needs |
 |---|---|---|
 | `task test` | The graph, the telemetry (in-memory exporters), the API, the sample corpus, input and error guardrails. Outbound network is blocked. | nothing |
 | `task test:pgvector` | Same ranking as the in-memory store, read-only API role, atomic re-index, model mismatch refused, query timeout | Docker (starts PostgreSQL) |
 | `task lint` | Ruff, generated files in sync, both Kustomize overlays render | kubectl |
-| `task test:stack` | One question's metrics, trace and logs arrive in Prometheus, Tempo and Loki | the cluster, or `TARGET=compose` |
+| `task test:compose` | Starts the Compose stack, indexes the sample notes, then follows one question: answer, metrics in Prometheus, full trace in Tempo (SQL span included), log line in Loki | Docker |
+| `task test:stack` | The same telemetry checks against the cluster's platform | the cluster |
 | `task test:k8s` | Through the Gateway: answer from pgvector, both replicas serving, pod identity on the trace, clean metric labels, SLO rules evaluated | the cluster |
 | `task test:ollama` | The real models answer from the right note, and off-topic questions still fall back | Ollama |
 
