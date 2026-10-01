@@ -2,55 +2,74 @@
 
 [![CI](https://github.com/jmiliamine/llm-observability-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/jmiliamine/llm-observability-lab/actions/workflows/ci.yml)
 
-A RAG over your own notes, built with LangGraph, instrumented with the
-[OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/),
-and observed with Prometheus, Tempo, Loki and Grafana. The notes are searched with pgvector.
-Everything runs in a two-node k3d cluster set up like a small company platform: Gateway API,
-pinned Helm charts, restricted pods, SLO alerts.
+A small question-answering app over a folder of notes, built to be watched. Every question
+leaves a trace, metrics and a log line, and the whole thing runs on a local Kubernetes cluster
+with Prometheus, Tempo, Loki and Grafana.
 
-![Grafana dashboard of the RAG: request rate, latency percentiles, tokens, retrieval scores](docs/img/dashboard.png)
+![Grafana dashboard: request rate, latency percentiles, time to first chunk, tokens](docs/img/dashboard.png)
 
-Most LLM demos stop at the answer. This lab is about what happens around it. For every
-question you can see how long each step took, how many tokens it used, why it ended in
-"I don't know", and which pod served it. The same trace ID links the metric, the trace and the log line.
+## What it does
 
-## What is in the box
+You give it a folder of Markdown or text notes. It cuts them into chunks, turns each chunk into
+a vector with an embedding model, and stores the vectors in PostgreSQL (pgvector).
 
-- **The app.** A LangGraph flow: `retrieve → generate → grade`, with one query rewrite
-  before giving up. Served by FastAPI (two replicas), local models through Ollama.
-- **The vector store.** PostgreSQL with pgvector. The API connects with a read-only role,
-  and the ingest job rebuilds the index and swaps it in atomically. An index built with another
-  embedding model is refused.
-- **The telemetry.** One trace per question, from the HTTP request down to each model call,
-  named after the GenAI conventions (`chat llama3.2:3b`, `gen_ai.client.token.usage`...).
-  Prompts stay off the traces unless you opt in.
+When you ask a question, it embeds the question the same way, fetches the closest chunks, and
+hands them to a small language model with one instruction: answer from this text only. If
+nothing in the notes is close enough, it rewrites the question once and tries again. If that
+fails too, it says "I don't know" instead of making something up.
 
-  ![One question as a trace in Tempo: the HTTP request, the LangGraph nodes, the embedding call and the llama3.2:3b call](docs/img/trace.png)
-- **The platform.** kube-prometheus-stack, Tempo, Loki and the OpenTelemetry Collector
-  from pinned Helm charts, Traefik as the Gateway API implementation, a local image registry.
-- **The operations side.** SLO recording rules, multi-window burn-rate alerts,
-  a dashboard generated from code, liveness and readiness probes that answer different
-  questions.
+That is retrieval-augmented generation (RAG) in its smallest useful form. The models run
+locally through [Ollama](https://ollama.com) (`llama3.2:3b` and `nomic-embed-text`), so the notes
+never leave the machine.
 
-## Architecture
+## Why it is built around observability
 
-![A question goes through the Gateway to the RAG API. The API searches the pgvector index in PostgreSQL, calls Ollama for embeddings and answers, and sends traces, metrics and logs to the OpenTelemetry Collector, which forwards them to Tempo, Loki and Prometheus. Grafana reads all three.](docs/img/architecture.svg)
+An LLM app can return HTTP 200 and still be broken: the first word takes eight seconds, token
+usage doubles after a prompt change, retrieval quietly finds nothing, or the answer has little
+to do with the retrieved text. None of that shows up in a status code.
 
-More detail, including what each namespace owns and how a request is traced, in
-[docs/architecture.md](docs/architecture.md).
+So the app is instrumented with OpenTelemetry, using the
+[GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) for names,
+and each question can be followed end to end:
 
-## Quick start
+![One question as a trace: HTTP request, graph nodes, embedding call, SQL query, model call](docs/img/trace.png)
 
-Tested on Windows 10 with Docker Desktop. Linux and macOS should work (every command
-goes through [Task](https://taskfile.dev)), but have not been tested yet.
+With that in place, these become things you look up rather than guess:
 
-You need Docker Desktop with about **10 GB of memory** for its VM, and these tools:
+- Where did the 4.7 seconds go? In the trace above: 86 ms to retrieve (18 ms of it in
+  PostgreSQL) and 4.6 s in the model.
+- How long until the first word, and how many tokens per answer? What would this traffic cost
+  on a paid API?
+- How often does retrieval find nothing relevant? A rising "I don't know" ratio after a
+  deployment usually means the index and the embedding model no longer match.
+- Are we within the latency objective? Recording rules and burn-rate alerts answer that.
+- Which pod served this request, and what did it log? The trace ID is on the span, on the
+  metric sample and on the log line, so Grafana jumps from one to the other.
+
+Prompts and answers are kept out of the telemetry unless you switch that on.
+
+## How it is put together
+
+![The request goes through the Gateway to the API, which searches PostgreSQL and calls Ollama. Telemetry goes to the Collector, then Tempo, Loki and Prometheus; Grafana reads all three.](docs/img/architecture.svg)
+
+The cluster is k3d (k3s in Docker) with two nodes, split the way a small company would split
+it. The platform side holds the monitoring stack and the Gateway, installed from pinned Helm
+charts. The app side holds the API (two replicas), PostgreSQL and the indexing job, as plain
+manifests with Kustomize. More in [docs/architecture.md](docs/architecture.md).
+
+## Try it
+
+Tested on Windows 10 with Docker Desktop. Every command goes through
+[Task](https://taskfile.dev), and CI runs the tests on Linux; the cluster itself has not been
+tried on Linux or macOS yet.
+
+You need Docker Desktop with about 10 GB of memory, and a few tools:
 
 ```bash
 winget install Docker.DockerDesktop Task.Task k3d.k3d Kubernetes.kubectl Helm.Helm astral-sh.uv
 ```
 
-Ollama is optional. Without it, the lab runs with built-in fake models (see below).
+Ollama is optional. Without it, use the `fake` mode below.
 
 ```bash
 winget install Ollama.Ollama
@@ -78,73 +97,65 @@ task setup
 task up
 ```
 
-`task up` takes about 15 minutes the first time: it creates the cluster, installs the
-platform, builds the image with the notes in `samples/notes`, starts PostgreSQL, indexes the
-notes into it and deploys the API.
-No GPU or no Ollama? Use `task up OVERLAY=fake` instead. Everything is the same except the
-answers, which become extracts of the notes instead of generated text.
+`task up` takes 15 to 25 minutes the first time, mostly image downloads. It creates the
+cluster, installs the platform, builds the app image with the sample notes, indexes them and
+deploys the API. No GPU or no Ollama? `task up OVERLAY=fake` runs the same thing with built-in
+fake models: the answers become extracts of the notes, and all the telemetry still flows.
 
-Send some traffic and open Grafana:
+Ask something, then send some traffic so the dashboards have data:
+
+```bash
+task ask Q="How do taints and tolerations work?"
+```
 
 ```bash
 task load
 ```
 
-| What | Where |
-|---|---|
-| Ask a question | `task ask Q="How do taints and tolerations work?"` |
-| Grafana | http://grafana.localhost:8080 (user `admin`, password from `task grafana:password`) |
-| Prometheus | http://prometheus.localhost:8080 |
+Grafana is at http://grafana.localhost:8080 (user `admin`, password from
+`task grafana:password`), with the dashboard in the *LLM Observability* folder. Click a point on
+a latency panel to open the matching trace, and from a span, its logs.
 
-The dashboard is in the *LLM Observability* folder. Click a point on a latency panel to jump
-to an example trace (exemplars), then from a span to its logs.
+`task stop` pauses the cluster and gives the memory back, `task start` brings it back, and
+`task cluster:down` deletes it.
 
-`task stop` pauses the cluster and gives the memory back; `task start` resumes it with all
-its data. `task cluster:down` deletes it.
-
-## Your own notes
-
-Any folder of `.md` or `.txt` files works:
+### Your own notes
 
 ```bash
-task app NOTES=D:/path/to/notes
+task app NOTES=/path/to/your/notes
 ```
 
-This rebuilds the image with those notes and re-indexes them. The API keeps answering from the
-previous index until the new one is complete. The notes end up inside a local image and a local
-database only. Nothing leaves your machine, since the models run locally too.
+This rebuilds the image with that folder and re-indexes it. The API keeps answering from the
+previous index until the new one is complete.
 
-## Lighter option: Docker Compose
+### Without the cluster
 
-If you only want the observability stack and PostgreSQL (about 1.5 GB instead of 4 GB) with
-the app running on your machine:
+For a lighter setup (about 1.5 GB), the same backends run with Docker Compose and the app runs
+on your machine:
 
 ```bash
 task stack:up
 ```
 
-```bash
-task stack:ingest
-```
-
-Grafana is then on http://localhost:3000, PostgreSQL on `localhost:5432`, and the app exports
-to `localhost:4318`, like in the cluster. `task stack:down` stops it.
+Grafana is then at http://localhost:3000. See [src/obslab](src/obslab/README.md) for how to
+index and ask from there.
 
 ## Tests
 
+`task test` runs in a couple of seconds with no network: fake models, telemetry captured in
+memory. Beyond that, each level needs a bit more and proves a bit more:
+
+| Command | What it proves |
+|---|---|
+| `task test` | the graph, its spans and metrics, the API, input and error handling |
+| `task test:pgvector` | the vector store against a real PostgreSQL: read-only API role, atomic re-index, timeouts |
+| `task test:compose` | one question followed through the Compose stack: answer, metrics, full trace, log line |
+| `task test:k8s` | the same through the cluster's Gateway, with both replicas and the alert rules |
+| `task test:ollama` | the real models answer from the right note |
+
 The first three run in CI on every push. Details in [tests/README.md](tests/README.md).
 
-| Command | What it proves | Needs |
-|---|---|---|
-| `task test` | The graph, the telemetry (in-memory exporters), the API, the sample corpus, input and error guardrails. Outbound network is blocked. | nothing |
-| `task test:pgvector` | Same ranking as the in-memory store, read-only API role, atomic re-index, model mismatch refused, query timeout | Docker (starts PostgreSQL) |
-| `task lint` | Ruff, generated files in sync, both Kustomize overlays render | kubectl |
-| `task test:compose` | Starts the Compose stack, indexes the sample notes, then follows one question: answer, metrics in Prometheus, full trace in Tempo (SQL span included), log line in Loki | Docker |
-| `task test:stack` | The same telemetry checks against the cluster's platform | the cluster |
-| `task test:k8s` | Through the Gateway: answer from pgvector, both replicas serving, pod identity on the trace, clean metric labels, SLO rules evaluated | the cluster |
-| `task test:ollama` | The real models answer from the right note, and off-topic questions still fall back | Ollama |
-
-## Layout
+## Where things are
 
 Each folder has its own README.
 
@@ -161,11 +172,11 @@ docs/            architecture and troubleshooting
 
 ## Limits
 
-- One PostgreSQL instance, no replication and no scheduled backups. Fine for a lab.
-- Local use only. The UIs have no TLS, and anonymous access in the Compose stack is read-only.
-- A 3B model answers like a 3B model. The point is the telemetry around it, not the answers.
+It is a lab. One PostgreSQL instance without replication or backups, plain HTTP on
+`*.localhost`, and a 3B model that answers like a 3B model. The interesting part is what you can
+see around the answers, not the answers themselves.
 
-Having trouble? See [docs/troubleshooting.md](docs/troubleshooting.md).
+If something does not start, see [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## License
 
