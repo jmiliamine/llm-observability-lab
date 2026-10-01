@@ -65,7 +65,7 @@ the embedding model. With `nomic-embed-text` the default is 0.6, with the fakes 
 
 **Pods are OOMKilled.** `kubectl describe pod` shows the reason. Limits are sized for the
 sample notes; a much larger notes folder needs more memory for the ingest job and PostgreSQL
-(see `deploy/k8s/apps/obslab/base/`).
+(see `deploy/k8s/app/base/`).
 
 ## Ollama
 
