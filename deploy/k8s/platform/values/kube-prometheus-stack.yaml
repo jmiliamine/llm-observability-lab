@@ -1,7 +1,7 @@
 # kube-prometheus-stack 91.5.1 — Prometheus Operator, Prometheus, Alertmanager, Grafana,
 # kube-state-metrics, node-exporter. Installed in namespace "monitoring" by `task platform:up`.
 #
-# Why the Operator (docs/adr/0010): it is how most companies run Prometheus on Kubernetes.
+# Why the Operator: it is how most companies run Prometheus on Kubernetes.
 # Scrape targets and alert rules become Kubernetes objects (ServiceMonitor, PrometheusRule)
 # that each team ships next to its app, instead of one central prometheus.yml.
 #

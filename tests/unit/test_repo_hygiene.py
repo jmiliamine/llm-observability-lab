@@ -54,7 +54,7 @@ WORD = re.compile(r"[a-z0-9]+")
 MACHINE_PATHS = [r"[A-Za-z]:\\Users\\", r"/home/[a-z]+/", r"/Users/[a-z]+/"]
 # The author's identity is expected in these files only.
 IDENTITY = [r"\bamine\b", r"\bjmili\b"]
-IDENTITY_OK = {"LICENSE", "pyproject.toml", "SECURITY.md", "CODE_OF_CONDUCT.md"}
+IDENTITY_OK = {"LICENSE", "pyproject.toml", ".github/SECURITY.md"}
 
 # The docs describe the system as it is; its development history is not part of them.
 HISTORY_PHRASES = [r"lessons? learned", r"the hard way", r"things that broke", r"\bwe learned\b",

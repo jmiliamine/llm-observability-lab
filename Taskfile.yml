@@ -82,7 +82,7 @@ tasks:
       - docker compose -f deploy/compose/docker-compose.yml down 2>/dev/null || true   # frees :4318
       - k3d cluster create --config deploy/k8s/cluster/k3d.yaml
       # Gateway API CRDs are NOT installed here: k3s's traefik-crd chart ships the version Traefik
-      # supports and refuses CRDs it does not own (see ADR 0011).
+      # supports and refuses CRDs it does not own.
       - kubectl apply -f deploy/k8s/platform/traefik-gateway.yaml
       # k3s installs Traefik asynchronously (helm-install-traefik Job): wait for it, then for the pods.
       - kubectl -n kube-system wait --for=condition=complete job/helm-install-traefik --timeout=300s
