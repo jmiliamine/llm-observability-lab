@@ -10,7 +10,7 @@ in both setups). With OBSLAB_PROVIDER=fake (the task default) no model is needed
 Vector store: `task test:compose` indexes the sample notes into the Compose PostgreSQL and sets
 OBSLAB_STACK_STORE=pgvector, so the question goes through pgvector and its SQL span must show
 up in Tempo. Against the cluster the database is not reachable from the host, so the index is
-built in memory from samples/notes.
+built in memory from the sample notes.
 """
 
 import dataclasses
@@ -29,7 +29,7 @@ pytestmark = pytest.mark.stack
 PROM = os.environ.get("PROM_URL", "http://localhost:9090")
 TEMPO = os.environ.get("TEMPO_URL", "http://localhost:3200")
 LOKI = os.environ.get("LOKI_URL", "http://localhost:3100")
-NOTES = Path(__file__).resolve().parents[2] / "samples" / "notes"
+NOTES = Path(__file__).resolve().parents[2] / "datalake"
 STORE = os.environ.get("OBSLAB_STACK_STORE", "memory")
 # One id per test run: queries only match this run's telemetry, not an earlier one.
 RUN_ID = uuid.uuid4().hex[:12]

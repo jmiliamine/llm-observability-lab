@@ -1,0 +1,32 @@
+# The data lake: the folder of notes on the host, as the ingest Job sees it.
+#
+# `task cluster:up` mounts the host folder (DATALAKE, default ./datalake) read-only at
+# /var/lib/obslab/datalake in every k3d node. This PersistentVolume points at that path and
+# the claim hands it to the ingest Job, the only workload that reads the notes. The API pods do
+# not mount it: they only read the index in PostgreSQL.
+#
+# A claim rather than a hostPath in the pod: the namespace enforces the restricted Pod Security
+# Standard, which forbids hostPath volumes in pods and allows claims.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: obslab-datalake
+spec:
+  capacity: {storage: 1Gi}             # required by the API; a hostPath volume is not size-limited
+  accessModes: [ReadOnlyMany]
+  persistentVolumeReclaimPolicy: Retain   # deleting the claim never touches the notes
+  storageClassName: obslab-datalake    # matches the claim only: no dynamic provisioning
+  hostPath:
+    path: /var/lib/obslab/datalake
+    type: Directory                    # fail the pod if the node has no data lake mounted
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: datalake
+spec:
+  accessModes: [ReadOnlyMany]
+  storageClassName: obslab-datalake
+  volumeName: obslab-datalake
+  resources:
+    requests: {storage: 1Gi}

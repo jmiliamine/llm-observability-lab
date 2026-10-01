@@ -34,7 +34,7 @@ spec:
           containers:
             - name: ingest
               image: obslab                  # replaced by the overlay (registry + immutable tag)
-              args: ["ingest", "--source", "/app/corpus"]
+              args: ["ingest", "--source", "/datalake"]
               envFrom:
                 - configMapRef: {name: obslab-config}
               env:
@@ -53,6 +53,9 @@ spec:
                 capabilities: {drop: [ALL]}
               volumeMounts:
                 - {name: tmp, mountPath: /tmp}
+                - {name: datalake, mountPath: /datalake, readOnly: true}
           volumes:
+            - name: datalake
+              persistentVolumeClaim: {claimName: datalake, readOnly: true}
             - name: tmp
               emptyDir: {sizeLimit: 64Mi}
