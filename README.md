@@ -139,6 +139,7 @@ The first three run in CI on every push. Details in [tests/README.md](tests/READ
 | `task test` | The graph, the telemetry (in-memory exporters), the API, the sample corpus, input and error guardrails. Outbound network is blocked. | nothing |
 | `task test:pgvector` | Same ranking as the in-memory store, read-only API role, atomic re-index, model mismatch refused, query timeout | Docker (starts PostgreSQL) |
 | `task lint` | Ruff, generated files in sync, both Kustomize overlays render | kubectl |
+| `task scan` | Security scans: workflow audit, secrets, dependency and image vulnerabilities, manifest misconfigurations | Docker |
 | `task test:compose` | Starts the Compose stack, indexes the sample notes, then follows one question: answer, metrics in Prometheus, full trace in Tempo (SQL span included), log line in Loki | Docker |
 | `task test:stack` | The same telemetry checks against the cluster's platform | the cluster |
 | `task test:k8s` | Through the Gateway: answer from pgvector, both replicas serving, pod identity on the trace, clean metric labels, SLO rules evaluated | the cluster |

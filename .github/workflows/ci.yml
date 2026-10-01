@@ -1,61 +1,100 @@
-# Checks every push and pull request with the same Task commands used locally.
-# The cluster suite (test:k8s) needs k3d and ~4 GB: it stays local for now.
+# Every job runs the same Task commands as a developer machine.
+#
+# Supply chain: actions are pinned to a commit SHA (a tag can be moved, a SHA cannot), tools to an
+# exact version, scanner images to a digest (Taskfile.yml). Dependabot proposes the bumps
+# (.github/dependabot.yml), so staying pinned does not mean staying old.
+#
+# Permissions: none by default, read-only on the code per job. No job needs a secret; the
+# workflow never runs on `pull_request_target`, so a pull request from a fork cannot reach one.
+#
+# The cluster suite (task test:k8s) needs k3d and ~4 GB: it stays local for now.
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 5 * * 1"      # Mondays: new CVEs and upstream image changes show up without a push
+  workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push replaces the run of a pull request; runs on main always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_LOCKED: "1"              # `uv sync` fails if uv.lock does not match pyproject.toml
+  UV_VERSION: "0.12.21"
+  TASK_VERSION: "3.53.1"
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   test:
     name: lint + unit + integration
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
-      - uses: go-task/setup-task@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7   # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e   # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ github.token }}
       - run: task setup
       - run: task lint             # ruff, generated files in sync, Kustomize overlays render
       - run: task test             # offline: outbound network blocked
 
   pgvector:
     name: pgvector store and guardrails
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
-          save-cache: false          # the test job saves the same uv cache; one writer is enough
-      - uses: go-task/setup-task@v2
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7   # v10.2.0
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: ${{ env.UV_VERSION }}
+          save-cache: false        # the test job saves the same uv cache; one writer is enough
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e   # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ github.token }}
       - run: task setup
       - run: task test:pgvector    # starts the Compose PostgreSQL service, fails if it is not reachable
 
   compose-e2e:
     name: compose end to end (telemetry of one question)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7   # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
           save-cache: false
-      - uses: go-task/setup-task@v2
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e   # v2.2.0
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ github.token }}
       - run: task setup
       # Starts Prometheus, Tempo, Loki, Grafana, the collector and PostgreSQL, indexes the sample
       # notes, asks one question and checks that its metrics, trace and logs arrived.
@@ -64,16 +103,48 @@ jobs:
         if: failure()
         run: docker compose -f deploy/compose/docker-compose.yml logs --no-color --tail 80
 
-  secrets:
-    name: secret scan (full history)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  security:
+    name: security scans (workflows, secrets, dependencies, manifests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
-          fetch-depth: 0
-      # The gitleaks CLI in its pinned image: scans every commit, needs no token or API access.
-      - name: gitleaks
-        run: >
-          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1
-          git /repo --redact --no-banner --exit-code 1
+          fetch-depth: 0           # gitleaks scans every commit
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7   # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          save-cache: false
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e   # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ github.token }}
+      - run: task setup
+      - run: task scan:workflows   # actionlint + zizmor on this file
+      - run: task scan:secrets     # gitleaks, full history
+      - run: task scan:deps        # known vulnerabilities in uv.lock
+      - run: task scan:config      # Dockerfile, Compose, rendered Kubernetes manifests
+
+  image:
+    name: image build + vulnerability scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7   # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          save-cache: false
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e   # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ github.token }}
+      - run: task setup
+      - run: task scan:image       # builds from uv.lock, fails on a fixable HIGH or CRITICAL
