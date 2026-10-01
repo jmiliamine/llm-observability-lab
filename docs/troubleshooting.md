@@ -81,7 +81,7 @@ are much faster.
 **No data in Grafana.** Send traffic first (`task load`). Metrics arrive after about 30
 seconds (10 s export + 15 s scrape).
 
-**`task test:stack` fails right after `task stack:up`.** Tempo answers 503 for about 15 seconds
+**`task test:compose` or `task test:stack` fails right after the stack starts.** Tempo answers 503 for about 15 seconds
 after its container is healthy. The test waits up to a minute; if it still fails, check
 `docker compose -f deploy/compose/docker-compose.yml logs tempo`.
 
