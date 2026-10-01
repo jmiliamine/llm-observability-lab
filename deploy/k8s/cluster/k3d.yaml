@@ -1,7 +1,7 @@
 # k3d cluster = k3s (CNCF-certified Kubernetes, the de facto home-lab distribution)
 # running as Docker containers. Created by `task cluster:up`.
 #
-# Why this shape (see docs/adr/0009):
+# Why this shape:
 #   - 1 server + 1 agent: a real control-plane/worker split (drain, cordon, node affinity,
 #     PV node pinning can be practised) for ~150 MB more than a single node.
 #   - memory caps per node (3 GB + 5 GB): one runaway pod cannot starve the host. Docker Desktop
@@ -20,7 +20,7 @@ agents: 1
 # Policy: follow the k3s *stable* channel (https://update.k3s.io/v1-release/channels), not
 # *latest* — a x.y.0 has had no patch release yet. One minor at a time (the control plane cannot
 # skip minors) and keep kubectl within +/-1 minor of the server (`task doctor` checks it).
-# In k3d an upgrade = recreate the cluster from this file (immutable nodes); see ADR 0009.
+# In k3d an upgrade = recreate the cluster from this file (immutable nodes).
 image: rancher/k3s:v1.36.4-k3s1
 ports:
   # Host 8080 -> k3d load balancer :80 -> Traefik Gateway (HTTP). All UIs are reached as

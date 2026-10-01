@@ -1,4 +1,4 @@
-# Same cluster, no GPU and no Ollama: the app uses its deterministic fake models (docs/adr/0015).
+# Same cluster, no GPU and no Ollama: the app uses its deterministic fake models.
 # Everything else is identical to `local`: Gateway, probes, telemetry, dashboards, SLO rules.
 # Answers are extracts of the notes rather than generated text, but every span, metric and log
 # line has the same shape as with a real model.

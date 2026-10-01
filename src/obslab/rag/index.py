@@ -1,7 +1,7 @@
 """In-memory vector index (LangChain's InMemoryVectorStore) persisted to a JSON file.
 
 For offline development and tests (OBSLAB_VECTOR_STORE=memory). Deployments use
-PostgreSQL + pgvector (rag/pgvector.py, ADR 0008); both give the same scores.
+PostgreSQL + pgvector (rag/pgvector.py); both give the same scores.
 
 A small sidecar file (`<index>.meta.json`) records which embedding model built the
 index. Vectors from two different models are not comparable, so the API refuses to

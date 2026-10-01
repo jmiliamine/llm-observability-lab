@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Image of the RAG service (API + ingest job share it; only the command differs).
 #
-# 2026 baseline applied here (docs/adr/0012):
+# 2026 baseline applied here:
 #   - multi-stage: build tools and pip caches never reach the runtime image
 #   - slim Debian 13 (trixie) base, pinned minor version; rebuild regularly for CVE fixes
 #   - non-root numeric UID (runAsNonRoot can be verified by Kubernetes), no shell login

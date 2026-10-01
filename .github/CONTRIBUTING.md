@@ -21,8 +21,8 @@ or the telemetry code.
 - `task lint` and `task test` pass.
 - If you touched manifests or the platform, say which of `task test:stack`, `task test:k8s`
   and `task test:ollama` you ran, and on which OS.
-- A new component or a design trade-off comes with a short ADR in `docs/adr/`
-  (context, decision, alternatives, consequences).
+- A new component or a design trade-off comes with a short paragraph in
+  `docs/architecture.md` (Design choices).
 - Dashboards and alert rules are generated: edit `scripts/gen_observability.py` or
   `deploy/shared/`, then `task gen`.
 

@@ -68,7 +68,7 @@ services:
     depends_on: [prometheus, tempo, loki]
     restart: unless-stopped
 
-  # Vector store (docs/adr/0008). Same image and init script as the cluster. The passwords below
+  # Vector store. Same image and init script as the cluster. The passwords below
   # are local-only defaults for a port bound to 127.0.0.1; override them in a .env file if you like.
   postgres:
     image: pgvector/pgvector:0.8.6-pg18-trixie
