@@ -38,7 +38,7 @@ and asks for confirmation. Do not run it without the user's explicit request.
   `task gen`. Never edit `deploy/k8s/platform/generated/` or the dashboard JSON by hand;
   `task lint` fails when they are out of sync.
 - Kubernetes: platform = pinned Helm charts (versions in `Taskfile.yml`, values in
-  `deploy/k8s/platform/values/`); app = Kustomize in `deploy/k8s/apps/obslab` (overlays
+  `deploy/k8s/platform/values/`); app = Kustomize in `deploy/k8s/app` (overlays
   `local` and `fake`; `_build` is generated and git-ignored). Every manifest explains *why*
   in comments; keep that.
 - Security baseline: restricted Pod Security, non-root, read-only root

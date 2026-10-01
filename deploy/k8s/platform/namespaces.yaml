@@ -2,7 +2,7 @@
 #   gateway        platform team: the shared entry point (Gateway)
 #   monitoring     platform team: Prometheus Operator, Prometheus, Alertmanager, Grafana
 #   observability  platform team: OTel Collector, Tempo, Loki (telemetry pipeline + stores)
-#   obslab         app team: the RAG (defined in deploy/k8s/apps/obslab)
+#   obslab         app team: the RAG (defined in deploy/k8s/app)
 #
 # Pod Security Admission (built into Kubernetes, replaces PodSecurityPolicy):
 #   enforce = what is rejected, warn/audit = what is reported. "restricted" is the target

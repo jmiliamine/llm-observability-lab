@@ -146,17 +146,17 @@ The first three run in CI on every push. Details in [tests/README.md](tests/READ
 
 ## Layout
 
+Each folder has its own README.
+
 ```
-src/obslab/           the app: RAG graph, providers, telemetry setup, API, CLI
-samples/notes/        20 short notes on Kubernetes, observability and RAG (the demo corpus)
-deploy/k8s/cluster/   k3d cluster definition
-deploy/k8s/platform/  Helm values, Gateway, generated dashboard and alert rules
-deploy/k8s/apps/      the app as Kustomize: base + overlays (local, fake)
-deploy/compose/       the same stack with Docker Compose
-deploy/shared/        SLO rules, dashboard and database init script shared by both
-scripts/              doctor, dashboard generator, build helpers
-tests/                unit, integration, e2e (pgvector, stack, k8s, ollama)
-docs/                 architecture and troubleshooting
+src/obslab/      the app: RAG graph, models, vector store, telemetry, API, CLI
+tests/           unit, integration and end-to-end suites
+deploy/k8s/      the cluster: k3d definition, platform (Helm values), app (Kustomize)
+deploy/compose/  the same backends with Docker Compose
+deploy/shared/   alert rules, dashboard and database setup used by both
+samples/         the demo notes
+scripts/         helpers behind the Task commands
+docs/            architecture and troubleshooting
 ```
 
 ## Limits
