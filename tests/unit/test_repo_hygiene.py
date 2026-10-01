@@ -118,7 +118,7 @@ def test_no_machine_paths_and_identity_only_where_expected():
 def test_no_development_history():
     hits = []
     for f in published_files():
-        if "samples/notes" in f.as_posix():
+        if "/datalake/" in f.as_posix():
             continue
         text = _text(f).lower()
         hits += [f"{f.relative_to(ROOT).as_posix()}: {p}" for p in HISTORY_PHRASES if re.search(p, text)]
@@ -128,7 +128,7 @@ def test_no_development_history():
 def test_docs_avoid_filler_words():
     hits = []
     for f in published_files():
-        if f.suffix.lower() != ".md" or "samples/notes" in f.as_posix():
+        if f.suffix.lower() != ".md" or "/datalake/" in f.as_posix():
             continue
         text = _text(f).lower()
         # Whole words only: "an elevated prompt" (Windows) is fine, "elevate your stack" is not.

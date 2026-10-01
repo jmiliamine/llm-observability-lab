@@ -84,8 +84,8 @@ task up
 ```
 
 `task up` takes about 15 minutes the first time: it creates the cluster, installs the
-platform, builds the image with the notes in `samples/notes`, starts PostgreSQL, indexes the
-notes into it and deploys the API.
+platform, builds the image, starts PostgreSQL, indexes the notes of the data lake (`datalake/`)
+into it and deploys the API.
 No GPU or no Ollama? Use `task up OVERLAY=fake` instead. Everything is the same except the
 answers, which become extracts of the notes instead of generated text.
 
@@ -109,15 +109,27 @@ its data. `task cluster:down` deletes it.
 
 ## Your own notes
 
-Any folder of `.md` or `.txt` files works:
+The notes live in a data lake: a folder of `.md` or `.txt` files, `datalake/` by default, which
+ships with the sample notes. The image holds code only. The ingest job mounts the folder
+read-only and writes the index to PostgreSQL; the API reads the index and never sees the files.
+
+Add, edit or remove notes in the folder, then re-index:
 
 ```bash
-task app NOTES=D:/path/to/notes
+task app:ingest
 ```
 
-This rebuilds the image with those notes and re-indexes them. The API keeps answering from the
-previous index until the new one is complete. The notes end up inside a local image and a local
-database only. Nothing leaves your machine, since the models run locally too.
+No image is rebuilt and no pod restarts. The API keeps answering from the previous index until
+the new one is complete.
+
+To use another folder, give it when the cluster is created (the mount is set at creation):
+
+```bash
+task up DATALAKE=D:/path/to/notes
+```
+
+The notes are only read from that folder and indexed into a local database. Nothing leaves your
+machine, since the models run locally too.
 
 ## Lighter option: Docker Compose
 
@@ -152,7 +164,7 @@ The first three run in CI on every push. Details in [tests/README.md](tests/READ
 
 ## Layout
 
-Each folder has its own README.
+Each code folder has its own README.
 
 ```
 src/obslab/      the app: RAG graph, models, vector store, telemetry, API, CLI
@@ -160,7 +172,7 @@ tests/           unit, integration and end-to-end suites
 deploy/k8s/      the cluster: k3d definition, platform (Helm values), app (Kustomize)
 deploy/compose/  the same backends with Docker Compose
 deploy/shared/   alert rules, dashboard and database setup used by both
-samples/         the demo notes
+datalake/        the notes to index: the sample notes, or point DATALAKE at your own folder
 scripts/         helpers behind the Task commands
 docs/            architecture and troubleshooting
 ```

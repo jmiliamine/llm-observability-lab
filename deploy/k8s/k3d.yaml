@@ -32,6 +32,12 @@ ports:
   # (Not through the Gateway: Windows does not resolve *.localhost outside browsers.)
   - port: 4318:30318
     nodeFilters: [loadbalancer]
+volumes:
+  # The data lake: the host folder of notes, read-only in every node, so the ingest Job can run
+  # on either. OBSLAB_DATALAKE is an absolute path set by `task cluster:up` (DATALAKE=...).
+  # Files added to the folder later are visible at once; another folder needs a new cluster.
+  - volume: ${OBSLAB_DATALAKE}:/var/lib/obslab/datalake:ro
+    nodeFilters: [server:*, agent:*]
 registries:
   create:
     # Push from Windows to localhost:5001; pods pull "obslab-registry.localhost:5001/..." (node mirror in /etc/rancher/k3s/registries.yaml)
