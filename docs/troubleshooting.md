@@ -70,7 +70,7 @@ sample notes; a much larger notes folder needs more memory for the ingest job an
 ## Ollama
 
 **Pods get 403 from Ollama.** Ollama rejects unknown `Host` headers. The config calls it as
-`ollama.obslab.svc.cluster.local`, which it accepts (see `docs/adr/0013`). If you changed
+`ollama.obslab.svc.cluster.local`, which it accepts. If you changed
 `OLLAMA_BASE_URL`, keep a `.local` or `.internal` name.
 
 **The first answer takes a minute.** Ollama loads the model on the first call. Later calls

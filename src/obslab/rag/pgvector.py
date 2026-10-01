@@ -1,4 +1,4 @@
-"""Vector store on PostgreSQL + pgvector (docs/adr/0008).
+"""Vector store on PostgreSQL + pgvector.
 
 Two roles, two entry points:
   - the API reads with `PgVectorStore` (role obslab_reader: SELECT only),

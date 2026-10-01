@@ -63,7 +63,7 @@ def test_trace_carries_pod_identity(answer):
 
 def test_metrics_labelled_with_kubernetes_metadata(answer):
     # Series from the pod carry stable k8s labels (namespace, deployment) added by the collector...
-    # ...but none of the duplicate uid/timestamp labels that only add cardinality (ADR 0007).
+    # ...but none of the duplicate uid/timestamp labels that only add cardinality.
     # We look for a CLEAN series rather than checking res[0]: right after a collector restart the
     # previous pod's series stay visible for a few minutes (staleness window). If the guard in
     # values/otel-collector.yaml were broken, no clean series would ever appear and this fails.

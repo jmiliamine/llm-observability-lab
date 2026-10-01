@@ -20,8 +20,7 @@ question you can see how long each step took, how many tokens it used, why it en
   before giving up. Served by FastAPI (two replicas), local models through Ollama.
 - **The vector store.** PostgreSQL with pgvector. The API connects with a read-only role,
   and the ingest job rebuilds the index and swaps it in atomically. An index built with another
-  embedding model is refused. The guardrails are listed, with their tests, in
-  [ADR 0008](docs/adr/0008-pgvector-vector-store.md).
+  embedding model is refused.
 - **The telemetry.** One trace per question, from the HTTP request down to each model call,
   named after the GenAI conventions (`chat llama3.2:3b`, `gen_ai.client.token.usage`...).
   Prompts stay off the traces unless you opt in.
@@ -30,8 +29,8 @@ question you can see how long each step took, how many tokens it used, why it en
 - **The platform.** kube-prometheus-stack, Tempo, Loki and the OpenTelemetry Collector
   from pinned Helm charts, Traefik as the Gateway API implementation, a local image registry.
 - **The operations side.** SLO recording rules, multi-window burn-rate alerts,
-  a dashboard generated from code, probes that say different things, and 15 short
-  [decision records](docs/adr/README.md).
+  a dashboard generated from code, liveness and readiness probes that answer different
+  questions.
 
 ## Architecture
 
@@ -157,7 +156,7 @@ deploy/compose/       the same stack with Docker Compose
 deploy/shared/        SLO rules, dashboard and database init script shared by both
 scripts/              doctor, dashboard generator, build helpers
 tests/                unit, integration, e2e (pgvector, stack, k8s, ollama)
-docs/                 architecture, troubleshooting, decision records
+docs/                 architecture and troubleshooting
 ```
 
 ## Limits

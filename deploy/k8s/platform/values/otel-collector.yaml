@@ -63,7 +63,7 @@ config:
     batch:
       send_batch_size: 1024
       timeout: 5s
-    # Cardinality guard for METRICS only (ADR 0007). resource_to_telemetry_conversion turns every
+    # Cardinality guard for METRICS only. resource_to_telemetry_conversion turns every
     # resource attribute into a Prometheus label; these ones change at every rollout or restart
     # and only duplicate information (pod uid, start time, replicaset uid, cluster uid).
     # k8s.pod.name / service.instance.id are KEPT on purpose: they are the per-replica identity;

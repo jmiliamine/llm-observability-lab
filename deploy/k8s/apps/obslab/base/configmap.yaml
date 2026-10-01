@@ -30,5 +30,5 @@ data:
   # model is free, this shows what the same traffic would cost on an API.
   OBSLAB_PRICE_IN: "1"
   OBSLAB_PRICE_OUT: "5"
-  OBSLAB_CAPTURE_CONTENT: "false"                              # prompts/answers stay off traces (ADR 0007)
+  OBSLAB_CAPTURE_CONTENT: "false"                              # prompts/answers stay off traces
   OTEL_SEMCONV_STABILITY_OPT_IN: http                          # stable HTTP metric names

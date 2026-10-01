@@ -7,12 +7,12 @@ it on a network as is.
 What it does take care of:
 
 - Pods run under the restricted Pod Security Standard: non-root, read-only root filesystem,
-  no privilege escalation, no service account token mounted (`docs/adr/0012`).
+  no privilege escalation, no service account token mounted.
 - The Grafana admin password and the database passwords are generated at install time,
   stored in Secrets, and never printed by the tasks that create them.
 - The API reaches PostgreSQL with a read-only role; only the ingest job can write the index,
   and only those two workloads may connect to the database (NetworkPolicy). Errors returned to
-  clients carry an error type, not connection details (`docs/adr/0008`).
+  clients carry an error type, not connection details.
 - The Compose stack uses fixed local-only database passwords on a port bound to 127.0.0.1;
   set `OBSLAB_*_PASSWORD` in a `.env` file to change them.
 - Prompts and answers are not recorded in telemetry unless `OBSLAB_CAPTURE_CONTENT=true`.
