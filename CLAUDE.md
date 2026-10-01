@@ -15,7 +15,7 @@ output instead of guessing.
 2. `task setup`: uv installs Python 3.14 and the dependencies into `.venv`.
 3. `task test`: must pass with no network. If it fails here, the problem is in the code,
    not the infrastructure. `task test:pgvector` then checks the vector store against a real
-   PostgreSQL (Docker only).
+   PostgreSQL, and `task test:compose` the whole telemetry path with Docker Compose (Docker only).
 4. **Ask the user before creating the cluster.** `task up` uses about 4 GB of RAM and
    15 minutes, and binds the ports above. Use `task up OVERLAY=fake` when Ollama is not
    installed or the models are not pulled (`task doctor` says so).

@@ -2,11 +2,15 @@
 (metrics), Tempo (trace) and Loki (logs).
 
 The same test runs against both deployments, only URLs change (env vars set by the task):
-  task stack:up && task test:stack TARGET=compose
-  task up       && task test:stack               (TARGET=k8s is the default)
+  task test:compose                              the whole Compose level, PostgreSQL included
+  task up && task test:stack                     against the cluster's platform
 The app runs in this process and exports OTLP to OTEL_EXPORTER_OTLP_ENDPOINT (localhost:4318
-in both setups). With OBSLAB_PROVIDER=fake (the task default) no model is needed: the index is
-built from samples/notes into a temp folder. PROVIDER=ollama uses the real models.
+in both setups). With OBSLAB_PROVIDER=fake (the task default) no model is needed.
+
+Vector store: `task test:compose` indexes the sample notes into the Compose PostgreSQL and sets
+OBSLAB_STACK_STORE=pgvector, so the question goes through pgvector and its SQL span must show
+up in Tempo. Against the cluster the database is not reachable from the host, so the index is
+built in memory from samples/notes.
 """
 
 import dataclasses
@@ -26,6 +30,7 @@ PROM = os.environ.get("PROM_URL", "http://localhost:9090")
 TEMPO = os.environ.get("TEMPO_URL", "http://localhost:3200")
 LOKI = os.environ.get("LOKI_URL", "http://localhost:3100")
 NOTES = Path(__file__).resolve().parents[2] / "samples" / "notes"
+STORE = os.environ.get("OBSLAB_STACK_STORE", "memory")
 # One id per test run: queries only match this run's telemetry, not an earlier one.
 RUN_ID = uuid.uuid4().hex[:12]
 
@@ -47,17 +52,22 @@ def asked(tmp_path_factory):
             unavailable(f"stack not reachable ({url})")
 
     os.environ["OTEL_RESOURCE_ATTRIBUTES"] = f"service.instance.id={RUN_ID}"
-    settings = dataclasses.replace(settings, telemetry="otlp", environment="stack-test", vector_store="memory",
+    settings = dataclasses.replace(settings, telemetry="otlp", environment="stack-test", vector_store=STORE,
                                    index_path=tmp_path_factory.mktemp("index") / "index.json",
                                    min_score=0.2 if settings.provider == "fake" else settings.min_score)
     tel = init_telemetry(settings, set_global=True)
-    docs = corpus.split(corpus.load_folder(NOTES))
-    index.build(docs, embeddings(settings, tel, GenAIMetrics(tel.meter)), settings.index_path,
-                meta={"provider": settings.provider, "embed_model": settings.embed_model_id})
+    if STORE == "memory":
+        docs = corpus.split(corpus.load_folder(NOTES))
+        index.build(docs, embeddings(settings, tel, GenAIMetrics(tel.meter)), settings.index_path,
+                    meta={"provider": settings.provider, "embed_model": settings.embed_model_id})
     c = build_components(settings, tel)
+    status = c.status()
+    if not status["ready"]:
+        unavailable(f"index not ready: {status.get('error')}")
     with tel.tracer.start_as_current_span("stack-test") as span:
         result = c.ask("How do you back up and restore etcd?")
         trace_id = format(span.get_span_context().trace_id, "032x")
+    c.close()
     tel.shutdown()          # flushes spans, metrics and logs
     return result, trace_id
 
@@ -98,7 +108,10 @@ def test_trace_reaches_tempo(asked):
         text = str(request(f"{TEMPO}/api/traces/{trace_id}"))
         return text if "invoke_workflow rag" in text and "chat " in text else None
 
-    assert _poll(complete_trace) is not None, f"complete trace {trace_id} not found in Tempo"
+    text = _poll(complete_trace)
+    assert text is not None, f"complete trace {trace_id} not found in Tempo"
+    if STORE == "pgvector":
+        assert "SELECT rag.chunks" in text, "the vector query span is missing from the trace"
 
 
 def test_logs_reach_loki_with_the_trace_id(asked):
