@@ -13,6 +13,15 @@ and observed with Prometheus, Tempo, Loki and Grafana. The notes are searched wi
 Everything runs in a two-node k3d cluster set up like a small company platform: Gateway API,
 pinned Helm charts, restricted pods, SLO alerts.
 
+One question, followed from the terminal to its trace:
+
+1. **Ask the RAG a question.** The answer comes back with its sources, a groundedness
+   score and a `trace_id`.
+2. **Monitor it in Grafana.** Latency per LangGraph node, tokens per second, time to first
+   chunk, similarity score of the retrieved notes, groundedness of the answers.
+3. **Follow its trace.** The cascade of spans for that same question: retrieval, embedding,
+   SQL query, model call, with the token counts on the model span.
+
 ![A question asked from a terminal, then its latency, token and retrieval metrics on the Grafana dashboard, then the same question as a trace in Tempo with the token counts on the model call](docs/img/demo.gif)
 
 Most LLM demos stop at the answer. This lab is about what happens around it. For every
