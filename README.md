@@ -5,6 +5,7 @@
 [![Python 3.14](https://img.shields.io/badge/python-3.14-3776ab?logo=python&logoColor=white)](pyproject.toml)
 [![OpenTelemetry GenAI conventions](https://img.shields.io/badge/OpenTelemetry-GenAI%20conventions-f5a800?logo=opentelemetry&logoColor=white)](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 [![Security scans](https://img.shields.io/badge/scans-zizmor%20%C2%B7%20gitleaks%20%C2%B7%20trivy-2f7366)](.github/SECURITY.md)
+[![LinkedIn: Amine Jmili](https://img.shields.io/badge/LinkedIn-Amine%20Jmili-0a66c2)](https://www.linkedin.com/in/jmiliamine/)
 
 A RAG over your own notes, built with LangGraph, instrumented with the
 [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/),
