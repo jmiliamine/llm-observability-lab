@@ -15,7 +15,7 @@ patches:
         path: /data/OBSLAB_PROVIDER
         value: fake
       # Scores of the hashing embeddings are lower than nomic's: 0.2 separates in-domain questions
-      # (>= 0.22 on samples/notes) from off-topic ones (< 0.15). See tests/unit/test_sample_corpus.py.
+      # (>= 0.22 on the sample notes) from off-topic ones (< 0.15). See tests/unit/test_sample_corpus.py.
       - op: replace
         path: /data/OBSLAB_MIN_SCORE
         value: "0.2"

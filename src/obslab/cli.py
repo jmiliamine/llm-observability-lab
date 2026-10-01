@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import sys
 import time
@@ -49,30 +50,27 @@ def _components(settings=None, telemetry=None):
 
 def cmd_ingest(a) -> int:
     from .config import Settings
-    from .rag import corpus, index
+    from .rag import corpus, pgvector
     from .rag.providers import embeddings
     from .telemetry import GenAIMetrics, init_telemetry
     settings = Settings()
     tel = init_telemetry(settings, set_global=True)
-    docs = corpus.split(corpus.load_folder(Path(a.source)))
-    if not docs:
-        print(f"no .md/.txt files under {a.source}", file=sys.stderr)
+    source = Path(a.source)
+    if not source.is_dir():
+        print(f"data lake not found: {a.source} is not a folder", file=sys.stderr)
+        return 1
+    docs = corpus.split(corpus.load_folder(source))
+    if not docs:        # checked before the database is touched: the current index keeps serving
+        print(f"no .md/.txt notes under {a.source}: the index is left as it is", file=sys.stderr)
         return 1
     meta = {"provider": settings.provider, "embed_model": settings.embed_model_id}
     emb = embeddings(settings, tel, GenAIMetrics(tel.meter))
     start = time.perf_counter()
-    with tel.tracer.start_as_current_span("ingest", attributes={"obslab.chunks": len(docs),
-                                                                "obslab.vector_store": settings.vector_store}):
-        if settings.vector_store == "pgvector":
-            from .rag import pgvector
-            with pgvector.open_pool(name="obslab-ingest") as pool:
-                pgvector.rebuild(pool, docs, emb, meta)
-            target = "PostgreSQL (rag.chunks)"
-        else:
-            index.build(docs, emb, settings.index_path, meta=meta)
-            target = str(settings.index_path)
+    with tel.tracer.start_as_current_span("ingest", attributes={"obslab.chunks": len(docs)}):
+        with pgvector.open_pool(name="obslab-ingest") as pool:
+            pgvector.rebuild(pool, docs, emb, meta)
     tel.shutdown()
-    print(f"indexed {len(docs)} chunks in {time.perf_counter() - start:.1f}s -> {target}")
+    print(f"indexed {len(docs)} chunks in {time.perf_counter() - start:.1f}s -> PostgreSQL (rag.chunks)")
     return 0
 
 
@@ -132,7 +130,8 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("ingest")
-    s.add_argument("--source", default="samples/notes", help="folder of .md/.txt notes")
+    s.add_argument("--source", default=os.environ.get("OBSLAB_DATALAKE", "datalake"),
+                   help="the data lake: a folder of .md/.txt notes (default: $OBSLAB_DATALAKE, else datalake)")
     s.set_defaults(fn=cmd_ingest)
 
     s = sub.add_parser("ask")

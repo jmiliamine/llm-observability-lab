@@ -10,7 +10,7 @@ in both setups). With OBSLAB_PROVIDER=fake (the task default) no model is needed
 Vector store: `task test:compose` indexes the sample notes into the Compose PostgreSQL and sets
 OBSLAB_STACK_STORE=pgvector, so the question goes through pgvector and its SQL span must show
 up in Tempo. Against the cluster the database is not reachable from the host, so the index is
-built in memory from samples/notes.
+built in memory from the sample notes.
 """
 
 import dataclasses
@@ -29,17 +29,19 @@ pytestmark = pytest.mark.stack
 PROM = os.environ.get("PROM_URL", "http://localhost:9090")
 TEMPO = os.environ.get("TEMPO_URL", "http://localhost:3200")
 LOKI = os.environ.get("LOKI_URL", "http://localhost:3100")
-NOTES = Path(__file__).resolve().parents[2] / "samples" / "notes"
+NOTES = Path(__file__).resolve().parents[2] / "datalake"
 STORE = os.environ.get("OBSLAB_STACK_STORE", "memory")
 # One id per test run: queries only match this run's telemetry, not an earlier one.
 RUN_ID = uuid.uuid4().hex[:12]
 
 
 @pytest.fixture(scope="module")
-def asked(tmp_path_factory):
+def asked():
+    from langchain_core.vectorstores import InMemoryVectorStore
+
     from obslab.app import build_components
     from obslab.config import Settings
-    from obslab.rag import corpus, index
+    from obslab.rag import corpus
     from obslab.rag.providers import embeddings
     from obslab.telemetry import GenAIMetrics, init_telemetry
 
@@ -52,15 +54,14 @@ def asked(tmp_path_factory):
             unavailable(f"stack not reachable ({url})")
 
     os.environ["OTEL_RESOURCE_ATTRIBUTES"] = f"service.instance.id={RUN_ID}"
-    settings = dataclasses.replace(settings, telemetry="otlp", environment="stack-test", vector_store=STORE,
-                                   index_path=tmp_path_factory.mktemp("index") / "index.json",
+    settings = dataclasses.replace(settings, telemetry="otlp", environment="stack-test",
                                    min_score=0.2 if settings.provider == "fake" else settings.min_score)
     tel = init_telemetry(settings, set_global=True)
+    store = None                # None: the index in PostgreSQL
     if STORE == "memory":
-        docs = corpus.split(corpus.load_folder(NOTES))
-        index.build(docs, embeddings(settings, tel, GenAIMetrics(tel.meter)), settings.index_path,
-                    meta={"provider": settings.provider, "embed_model": settings.embed_model_id})
-    c = build_components(settings, tel)
+        store = InMemoryVectorStore(embeddings(settings, tel, GenAIMetrics(tel.meter)))
+        store.add_documents(corpus.split(corpus.load_folder(NOTES)))
+    c = build_components(settings, tel, store=store)
     status = c.status()
     if not status["ready"]:
         unavailable(f"index not ready: {status.get('error')}")

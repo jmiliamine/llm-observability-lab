@@ -38,8 +38,8 @@ exemplars, so Grafana can jump between the three.
 
 ## The index
 
-The ingest job (a suspended CronJob, triggered by `task app:ingest`) reads the notes baked into
-the image, embeds them with the configured model and rebuilds `rag.chunks` in a staging table.
+The ingest job (a suspended CronJob, triggered by `task app:ingest`) reads the notes from the data
+lake, embeds them with the configured model and rebuilds `rag.chunks` in a staging table.
 The new table and its metadata (model, dimension, chunk count) replace the old ones in a single
 transaction, so the API answers from the old index until the new one is complete. The API only
 has a read-only role; `/readyz` reports 503 when the database is unreachable, empty, or holds an
@@ -108,8 +108,16 @@ change on each rollout from metrics, while traces and logs keep them. Prompts an
 only recorded on spans when `OBSLAB_CAPTURE_CONTENT=true`.
 
 **PostgreSQL + pgvector.** The index is shared, so the API is stateless: two replicas, rolling
-updates without downtime, re-indexing without a restart. An in-memory store remains for offline
-tests.
+updates without downtime, re-indexing without a restart. It is the only copy of the index: nothing is kept in a local file. The unit tests replace it
+with an in-memory double.
+
+**A data lake for the notes.** The notes are data, so they stay out of the image: a folder on
+the host (`DATALAKE`, default `datalake/`), mounted read-only into the cluster nodes and handed
+to the ingest job through a PersistentVolumeClaim. Changing notes means re-running the ingest
+job, with the same image and the same API pods. Only the ingest job mounts the folder. An empty
+or missing folder fails the job before the database is touched, so the current index keeps
+serving. In production the same job would read from object storage; a folder keeps the lab to
+one less service.
 
 **k3d for the cluster.** k3s in Docker gives a real control-plane and worker split for about
 500 MB per node, with Traefik, storage and a load balancer included. `task stop` gives the

@@ -19,7 +19,7 @@ pytestmark = pytest.mark.pgvector
 
 WRITER = os.environ.get("PG_WRITER_DSN", "postgresql://obslab_writer:writer-local@127.0.0.1:5432/obslab")
 READER = os.environ.get("PG_READER_DSN", "postgresql://obslab_reader:reader-local@127.0.0.1:5432/obslab")
-NOTES = Path(__file__).resolve().parents[2] / "samples" / "notes"
+NOTES = Path(__file__).resolve().parents[2] / "datalake"
 META = {"provider": "fake", "embed_model": "fake-embed"}
 QUESTIONS = {
     "How do taints and tolerations work?": "kubernetes/taints-and-tolerations.md",
@@ -166,7 +166,7 @@ def test_the_api_serves_from_pgvector(store, docs, monkeypatch):
     for key, value in (("PGHOST", "127.0.0.1"), ("PGPORT", "5432"), ("PGDATABASE", "obslab"),
                        ("PGUSER", "obslab_reader"), ("PGPASSWORD", READER.split(":")[2].split("@")[0])):
         monkeypatch.setenv(key, value)
-    settings = Settings(provider="fake", vector_store="pgvector", telemetry="none", min_score=0.2)
+    settings = Settings(provider="fake", telemetry="none", min_score=0.2)
     tel = init_telemetry(settings)
     c = build_components(settings, tel)
     try:

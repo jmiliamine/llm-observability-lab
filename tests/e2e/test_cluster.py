@@ -9,9 +9,12 @@
 Run with `task test:k8s` (cluster up, app deployed, index built), with either overlay.
 """
 
+import json
 import os
+import subprocess
 import time
 import urllib.parse
+from pathlib import Path
 
 import pytest
 
@@ -45,7 +48,7 @@ def answer():
 
 
 def test_answer_through_the_gateway(answer):
-    assert answer["route"] == "answered", answer      # samples/notes covers this question
+    assert answer["route"] == "answered", answer      # the sample notes cover this question
     assert "kubernetes/taints-and-tolerations.md" in answer["sources"]
     assert answer["trace_id"] and len(answer["trace_id"]) == 32
 
@@ -109,3 +112,58 @@ def test_both_replicas_serve_from_the_shared_index(answer):
         if len(pods - {None}) >= 2:
             break
     assert len(pods - {None}) >= 2, f"answers came from {pods}"
+
+
+# ── The data lake: notes change, the image and the API pods do not ──────────────
+DATALAKE = Path(os.environ.get("OBSLAB_DATALAKE", Path(__file__).resolve().parents[2] / "datalake"))
+NEW_NOTE = "runbooks/heliotrope-freeze.md"
+NEW_TEXT = ("# Heliotrope deploy freeze\n\nThe Heliotrope deploy freeze starts every Thursday at 16:00 and ends "
+            "on Monday at 09:00. During the Heliotrope freeze only rollbacks are deployed.\n")
+NEW_QUESTION = "When does the Heliotrope deploy freeze start?"
+
+
+def kubectl(*args: str, timeout: int = 1300) -> str:
+    out = subprocess.run(["kubectl", "-n", "obslab", *args], capture_output=True, text=True, timeout=timeout)
+    assert out.returncode == 0, out.stderr
+    return out.stdout
+
+
+def run_ingest() -> None:
+    job = f"obslab-ingest-test-{int(time.time())}"
+    kubectl("create", "job", job, "--from=cronjob/obslab-ingest")
+    kubectl("wait", "--for=condition=complete", f"job/{job}", "--timeout=20m")
+
+
+def api_pods() -> dict:
+    """{pod name: image} of the running API replicas."""
+    pods = json.loads(kubectl("get", "pods", "-l", "app.kubernetes.io/name=obslab-api", "-o", "json"))["items"]
+    return {p["metadata"]["name"]: p["spec"]["containers"][0]["image"] for p in pods}
+
+
+def test_only_the_ingest_job_mounts_the_data_lake(answer):
+    api = json.loads(kubectl("get", "deploy", "obslab-api", "-o", "json"))["spec"]["template"]["spec"]
+    assert not [v for v in api.get("volumes", []) if "persistentVolumeClaim" in v], "the API must not see the notes"
+    cron = json.loads(kubectl("get", "cronjob", "obslab-ingest", "-o", "json"))
+    spec = cron["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+    mount = next(m for m in spec["containers"][0]["volumeMounts"] if m["mountPath"] == "/datalake")
+    assert mount["readOnly"] is True
+
+
+def test_a_new_note_is_served_without_a_new_image(answer):
+    note = DATALAKE / NEW_NOTE
+    if not DATALAKE.is_dir():
+        unavailable(f"data lake folder not found on the host: {DATALAKE} (set OBSLAB_DATALAKE)")
+    assert request(f"{RAG}/ask", {"question": NEW_QUESTION}, timeout=180)["route"] == "fallback"
+    pods = api_pods()
+    note.parent.mkdir(exist_ok=True)
+    note.write_text(NEW_TEXT, encoding="utf-8")
+    try:
+        run_ingest()
+        r = request(f"{RAG}/ask", {"question": NEW_QUESTION}, timeout=180)
+        assert r["route"] == "answered" and NEW_NOTE in r["sources"], r
+        assert api_pods() == pods, "same pods, same image: only the index changed"
+    finally:
+        note.unlink()
+        note.parent.rmdir()
+        run_ingest()
+    assert request(f"{RAG}/ask", {"question": NEW_QUESTION}, timeout=180)["route"] == "fallback"

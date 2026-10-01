@@ -17,7 +17,7 @@ vars:
   IMAGE: obslab
   APP_DIR: deploy/k8s/app
   OVERLAY: '{{.OVERLAY | default "local"}}'   # local (Ollama) | fake (no model needed)
-  NOTES: '{{.NOTES | default "samples/notes"}}'  # folder of .md/.txt notes baked into the image
+  DATALAKE: '{{.DATALAKE | default "datalake"}}'  # the data lake: folder of .md/.txt notes to index
   VALUES: deploy/k8s/platform/values
   # Chart versions are pinned: upgrading a platform component is a reviewed one-line change.
   KPS_VERSION: 91.5.1        # prometheus-community/kube-prometheus-stack (operator v0.94)
@@ -94,9 +94,11 @@ tasks:
   scan:image:
     desc: Build the app image and scan it for fixable HIGH and CRITICAL vulnerabilities (Trivy)
     cmds:
-      - '{{.PY}} scripts/stage_notes.py samples/notes'
       - docker build -q -t {{.IMAGE}}:scan .
+      # The image carries code only: the notes stay in the data lake.
+      - docker run --rm --entrypoint sh {{.IMAGE}}:scan -c 'test -z "$(ls -A /app)" || { echo "unexpected files in /app:"; ls -A /app; exit 1; }'
       # Scanned from a tarball: no need to hand the Docker socket to the scanner.
+      - '{{.PY}} -c "import os; os.makedirs(''build'', exist_ok=True)"'
       - docker save {{.IMAGE}}:scan -o build/image-scan.tar
       - docker run --rm -v "{{.ROOT_DIR}}/build:/build:ro" -v obslab-trivy-cache:/root/.cache {{.TRIVY}} image --input /build/image-scan.tar --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet
 
@@ -114,19 +116,22 @@ tasks:
     cmds: ['docker compose -f deploy/compose/docker-compose.yml down']
 
   stack:ingest:
-    desc: Index NOTES into the compose PostgreSQL with the writer role (local-only default password)
+    desc: Index the data lake (DATALAKE=folder) into the compose PostgreSQL with the writer role
     env:
       PGHOST: 127.0.0.1
       PGDATABASE: obslab
       PGUSER: obslab_writer
       PGPASSWORD: '{{.OBSLAB_WRITER_PASSWORD | default "writer-local"}}'
       OBSLAB_PROVIDER: '{{.PROVIDER | default "ollama"}}'
-    cmds: ['{{.PY}} -m obslab ingest --source "{{.NOTES}}"']
+    cmds: ['{{.PY}} -m obslab ingest --source "{{.DATALAKE}}"']
 
   # ── Cluster lifecycle ───────────────────────────────────────────────────────
   cluster:up:
-    desc: Create the k3d cluster (1 server + 1 agent + registry) with Traefik as Gateway API
+    desc: Create the k3d cluster (1 server + 1 agent + registry), with DATALAKE mounted read-only in the nodes
     status: ['k3d cluster list {{.CLUSTER}}']        # idempotent: skip if it exists
+    env:
+      OBSLAB_DATALAKE:                               # absolute path, read by deploy/k8s/k3d.yaml
+        sh: '{{.PY}} scripts/datalake_path.py "{{.DATALAKE}}"'
     cmds:
       - docker compose -f deploy/compose/docker-compose.yml down 2>/dev/null || true   # frees :4318
       - k3d cluster create --config deploy/k8s/k3d.yaml
@@ -199,9 +204,8 @@ tasks:
       READER: {sh: '{{.PY}} -c "import secrets; print(secrets.token_urlsafe(24))"'}
 
   app:build:
-    desc: Stage NOTES, build the image, tag it (git SHA or timestamp), push it to the k3d registry
+    desc: Build the image (code only), tag it (git SHA or timestamp), push it to the k3d registry
     cmds:
-      - '{{.PY}} scripts/stage_notes.py "{{.NOTES}}"'
       - docker build --build-arg VCS_REF={{.TAG}} -t {{.REGISTRY_PUSH}}/{{.IMAGE}}:{{.TAG}} .
       - docker push {{.REGISTRY_PUSH}}/{{.IMAGE}}:{{.TAG}}
       - '{{.PY}} scripts/set_image_tag.py {{.OVERLAY}} {{.TAG}}'
@@ -216,7 +220,7 @@ tasks:
       - kubectl -n obslab rollout status deploy/obslab-api --timeout=15m
 
   app:ingest:
-    desc: Build the vector index now (one-off Job from the suspended CronJob) and show its result
+    desc: Index the data lake now (one-off Job from the suspended CronJob); run it again after changing notes
     vars:
       JOB:
         sh: '{{.PY}} -c "import time; print(time.strftime(''obslab-ingest-%Y%m%d%H%M%S''))"'
@@ -226,7 +230,7 @@ tasks:
       - kubectl -n obslab logs job/{{.JOB}} --tail=5
 
   app:
-    desc: Build, apply, index and roll out the app (OVERLAY=local|fake, NOTES=folder)
+    desc: Build, apply, index and roll out the app (OVERLAY=local|fake)
     cmds:
       - task: app:build
       - task: db:secret
@@ -269,7 +273,7 @@ tasks:
     cmds:
       - task: stack:up
       - task: stack:ingest
-        vars: {PROVIDER: '{{.PROVIDER | default "fake"}}', NOTES: samples/notes}
+        vars: {PROVIDER: '{{.PROVIDER | default "fake"}}', DATALAKE: datalake}
       - task: test:compose:run
 
   test:compose:run:

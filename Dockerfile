@@ -7,7 +7,7 @@
 #   - slim Debian 13 (trixie) base, pinned minor version; security updates applied at build
 #   - no pip in the runtime image
 #   - non-root numeric UID (runAsNonRoot can be verified by Kubernetes), no shell login
-#   - no secrets baked in; config comes from env at runtime
+#   - no secrets and no data baked in; config comes from env at runtime
 #   - OCI labels so a running image can be traced back to its source commit
 ARG PYTHON_VERSION=3.14
 
@@ -50,11 +50,9 @@ RUN apt-get update \
 # Dedicated user; UID/GID 10001 matches runAsUser/fsGroup in the Deployment.
 RUN groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 
+# Code only. The notes stay in the data lake (a volume the ingest Job mounts read-only) and the
+# index in PostgreSQL, so neither changes the image.
 COPY --from=build /opt/venv /opt/venv
-# The notes to index ship with the image (staged in build/corpus/ by `task app:build`, from
-# samples/notes/ or your own folder). The *index* is not in the image: the ingest Job writes it
-# to PostgreSQL (pgvector), with the same embedding model the API uses.
-COPY --chown=10001:10001 build/corpus /app/corpus
 
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
