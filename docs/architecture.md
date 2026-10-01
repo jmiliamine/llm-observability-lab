@@ -62,7 +62,7 @@ What protects the index:
 
 | Signal | Examples | Where |
 |---|---|---|
-| GenAI metrics | `gen_ai.client.operation.duration`, `gen_ai.client.token.usage`, time to first chunk | Prometheus |
+| GenAI metrics | `gen_ai.client.operation.duration`, `gen_ai.client.inference.usage.{input,output}_tokens`, time to first chunk | Prometheus |
 | RAG metrics | retrieval top score, relevant documents, rewrites, fallbacks, groundedness | Prometheus |
 | HTTP metrics | `http.server.request.duration` (stable semantic conventions) | Prometheus |
 | Traces | one tree per question, GenAI attributes on each model call, a database span per vector query | Tempo |
