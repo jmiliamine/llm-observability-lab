@@ -15,7 +15,6 @@ SECRET = "postgresql://obslab_reader:s3cret@db.internal:5432/obslab"
     ({"top_k": 0}, "OBSLAB_TOP_K"),
     ({"top_k": MAX_K + 1}, "OBSLAB_TOP_K"),
     ({"min_score": 1.5}, "OBSLAB_MIN_SCORE"),
-    ({"vector_store": "chroma"}, "OBSLAB_VECTOR_STORE"),
     ({"provider": "openai"}, "OBSLAB_PROVIDER"),
     ({"db_timeout_ms": 0}, "OBSLAB_DB_TIMEOUT_MS"),
 ])

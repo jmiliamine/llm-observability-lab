@@ -18,22 +18,23 @@ NOTES = Path(__file__).resolve().parents[2] / "samples" / "notes"
 
 
 @pytest.fixture(scope="module")
-def rag(tmp_path_factory):
+def rag():
+    from langchain_core.vectorstores import InMemoryVectorStore
+
     from obslab.app import build_components
     from obslab.config import Settings
-    from obslab.rag import corpus, index
+    from obslab.rag import corpus
     from obslab.rag.providers import embeddings
     from obslab.telemetry import GenAIMetrics, init_telemetry
 
-    settings = dataclasses.replace(Settings(), provider="ollama", telemetry="none", vector_store="memory",
-                                   index_path=tmp_path_factory.mktemp("index") / "index.json")
+    settings = dataclasses.replace(Settings(), provider="ollama", telemetry="none")
     if not is_up(f"{settings.ollama_url}/api/version"):
         unavailable(f"Ollama not reachable at {settings.ollama_url}")
     tel = init_telemetry(settings)
     docs = corpus.split(corpus.load_folder(NOTES))
-    index.build(docs, embeddings(settings, tel, GenAIMetrics(tel.meter)), settings.index_path,
-                meta={"provider": "ollama", "embed_model": settings.embed_model_id})
-    yield build_components(settings, tel)
+    store = InMemoryVectorStore(embeddings(settings, tel, GenAIMetrics(tel.meter)))
+    store.add_documents(docs)
+    yield build_components(settings, tel, store=store)
     tel.shutdown()
 
 

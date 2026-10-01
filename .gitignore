@@ -7,7 +7,6 @@ __pycache__/
 .ruff_cache/
 
 # Runtime data: the vector index is rebuilt from your notes (`obslab ingest`)
-data/
 
 # Build staging: `task app:build` copies your notes here before `docker build`
 build/
