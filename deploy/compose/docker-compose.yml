@@ -29,7 +29,7 @@ services:
       - --enable-feature=exemplar-storage
       - --web.enable-lifecycle
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../shared/prometheus:/etc/prometheus/rules:ro     # same SLO rules as the k8s PrometheusRule
       - prometheus-data:/prometheus
     ports: ["127.0.0.1:9090:9090"]

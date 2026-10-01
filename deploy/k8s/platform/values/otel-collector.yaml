@@ -19,7 +19,7 @@ presets:
     enabled: true
 
 service:
-  type: NodePort                   # lets k3d map host :4318 to the collector (see cluster/k3d.yaml)
+  type: NodePort                   # lets k3d map host :4318 to the collector (see k3d.yaml)
 
 ports:
   otlp-http:

@@ -9,7 +9,7 @@ Writes:
                                                                Grafana sidecar picks up (label grafana_dashboard=1)
   deploy/k8s/platform/generated/prometheusrule-rag-slo.yaml    deploy/shared/prometheus/rag-slo.yml wrapped
                                                                in a PrometheusRule CR for the Prometheus Operator
-  deploy/k8s/apps/obslab/base/postgres-init.generated.yaml     deploy/shared/postgres/init-obslab.sh in a ConfigMap
+  deploy/k8s/app/base/postgres-init.generated.yaml     deploy/shared/postgres/init-obslab.sh in a ConfigMap
                                                                (Kustomize cannot read files outside its root)
 
 Why generate instead of hand-writing: the dashboard JSON is ~1 000 lines nobody should edit
@@ -30,7 +30,7 @@ OUT = ROOT / "deploy/shared/grafana/llm-rag-overview.json"
 RULES = ROOT / "deploy/shared/prometheus/rag-slo.yml"
 GEN = ROOT / "deploy/k8s/platform/generated"
 PG_INIT = ROOT / "deploy/shared/postgres/init-obslab.sh"
-APP_BASE = ROOT / "deploy/k8s/apps/obslab/base"
+APP_BASE = ROOT / "deploy/k8s/app/base"
 PROM = {"type": "prometheus", "uid": "prometheus"}
 LOKI = {"type": "loki", "uid": "loki"}
 
