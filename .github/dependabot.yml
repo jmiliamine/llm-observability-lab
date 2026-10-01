@@ -29,8 +29,7 @@ updates:
     directory: /deploy/compose
     schedule: {interval: weekly}
     cooldown: {default-days: 7}
-    groups:
-      compose-images: {patterns: ["*"]}
+    # One pull request per image: the end-to-end job then says which upgrade breaks the stack.
 
   - package-ecosystem: docker         # images referenced by the Kubernetes manifests
     directory: /deploy/k8s/app/base
