@@ -98,6 +98,7 @@ tasks:
       # The image carries code only: the notes stay in the data lake.
       - docker run --rm --entrypoint sh {{.IMAGE}}:scan -c 'test -z "$(ls -A /app)" || { echo "unexpected files in /app:"; ls -A /app; exit 1; }'
       # Scanned from a tarball: no need to hand the Docker socket to the scanner.
+      - '{{.PY}} -c "import os; os.makedirs(''build'', exist_ok=True)"'
       - docker save {{.IMAGE}}:scan -o build/image-scan.tar
       - docker run --rm -v "{{.ROOT_DIR}}/build:/build:ro" -v obslab-trivy-cache:/root/.cache {{.TRIVY}} image --input /build/image-scan.tar --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --quiet
 
