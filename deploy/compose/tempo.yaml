@@ -1,4 +1,9 @@
+# Tempo 3 single binary, same layout as the configuration the Helm chart renders for the cluster.
+# (Tempo 3 has no `ingester` or `compactor` block any more; retention lives under
+# `backend_scheduler`.)
 stream_over_http_enabled: true
+usage_report:
+  reporting_enabled: false
 server:
   http_listen_port: 3200
 distributor:
@@ -7,11 +12,11 @@ distributor:
       protocols:
         grpc:
           endpoint: 0.0.0.0:4317
-ingester:
-  max_block_duration: 5m
-compactor:
-  compaction:
-    block_retention: 72h
+backend_scheduler:
+  provider:
+    compaction:
+      compaction:
+        block_retention: 72h
 storage:
   trace:
     backend: local

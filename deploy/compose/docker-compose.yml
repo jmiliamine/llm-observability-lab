@@ -9,7 +9,7 @@ name: obslab
 
 services:
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.131.0
+    image: otel/opentelemetry-collector-contrib:0.161.0
     command: ["--config=/etc/otelcol/config.yaml"]
     volumes:
       - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.14.0
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=15d
@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
 
   tempo:
-    image: grafana/tempo:2.8.2
+    image: grafana/tempo:3.0.3
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml:ro
@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
 
   loki:
-    image: grafana/loki:3.5.3
+    image: grafana/loki:3.7.8
     command: ["-config.file=/etc/loki/config.yaml"]
     volumes:
       - ./loki.yaml:/etc/loki/config.yaml:ro
@@ -52,14 +52,16 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:12.1.1
+    image: grafana/grafana:13.2.2
     environment:
-      # Anonymous visitors can look (dashboards and Explore) but not change anything. To edit,
-      # sign in as admin/admin (Grafana asks for a new password on first login).
+      # Anonymous visitors can read the dashboards. Explore and editing need a sign-in:
+      # admin/admin, and Grafana asks for a new password on first login.
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_USERS_VIEWERS_CAN_EDIT: "true"        # lets Viewers use Explore; they still cannot save
-      GF_FEATURE_TOGGLES_ENABLE: traceToMetrics
+      GF_FEATURE_TOGGLES_traceToMetrics: "true"
+      # SQLite in WAL mode: the first start runs ~800 migrations, each waiting for an fsync
+      # with the default journal.
+      GF_DATABASE_WAL: "true"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ../shared/grafana:/var/lib/grafana/dashboards:ro  # same dashboard as the k8s ConfigMap
