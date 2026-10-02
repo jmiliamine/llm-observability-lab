@@ -86,8 +86,15 @@ grafana:
   # A first install pulls a ~460 MB image and runs ~800 SQLite migrations: allow more than the
   # default 600 s before the Deployment counts as stuck.
   progressDeadlineSeconds: 1200
+  # Grafana's own database lives in memory. Dashboards and datasources are code and the admin
+  # password is a Secret, so there is nothing to keep, and the ~800 first-start migrations take
+  # seconds on a tmpfs instead of minutes on a Docker Desktop virtual disk. The space counts
+  # against the memory limit above. A production Grafana would use an external database.
   persistence:
-    enabled: false              # dashboards and datasources are code; nothing to keep
+    enabled: false
+    inMemory:
+      enabled: true
+      sizeLimit: 128Mi
   grafana.ini:
     analytics: {reporting_enabled: false, check_for_updates: false}
     server:
