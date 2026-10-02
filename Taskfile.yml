@@ -138,9 +138,10 @@ tasks:
       # Gateway API CRDs are NOT installed here: k3s's traefik-crd chart ships the version Traefik
       # supports and refuses CRDs it does not own.
       - kubectl apply -f deploy/k8s/platform/traefik-gateway.yaml
-      # k3s installs Traefik asynchronously (helm-install-traefik Job): wait for it, then for the pods.
-      - kubectl -n kube-system wait --for=condition=complete job/helm-install-traefik --timeout=300s
-      - kubectl -n kube-system rollout status deploy/traefik --timeout=180s
+      # k3s installs Traefik asynchronously, in two Jobs. Only the first one is awaited here: it
+      # brings the Gateway API CRDs that the next steps apply. Traefik itself starts in the
+      # background and is checked by `platform:wait`.
+      - kubectl -n kube-system wait --for=condition=complete job/helm-install-traefik-crd --timeout=300s
 
   stop:
     desc: Stop the cluster containers (frees ~4 GB RAM, keeps all data)
@@ -180,8 +181,10 @@ tasks:
       - kubectl apply -f deploy/k8s/platform/gateway.yaml
 
   platform:wait:
-    desc: Wait until every platform component is Ready (Prometheus, Grafana, Loki, Tempo, collector)
+    desc: Wait until every platform component is Ready (Traefik, Prometheus, Grafana, Loki, Tempo, collector)
     cmds:
+      - kubectl -n kube-system wait --for=condition=complete job/helm-install-traefik --timeout=10m
+      - kubectl -n kube-system rollout status deploy/traefik --timeout=5m
       - kubectl -n observability rollout status deploy/otel-collector --timeout=10m
       - kubectl -n observability rollout status statefulset/tempo --timeout=10m
       - kubectl -n observability rollout status statefulset/loki --timeout=10m
@@ -229,6 +232,15 @@ tasks:
       TAG:
         sh: git rev-parse --short HEAD 2>/dev/null || {{.PY}} -c "import time; print(time.strftime('%Y%m%d-%H%M%S'))"
 
+  app:image:
+    internal: true
+    desc: Build the image without pushing it (needs no cluster, so `task up` does it while the cluster is created)
+    cmds:
+      - docker build -q --build-arg VCS_REF={{.TAG}} -t {{.REGISTRY_PUSH}}/{{.IMAGE}}:{{.TAG}} .
+    vars:
+      TAG:
+        sh: git rev-parse --short HEAD 2>/dev/null || {{.PY}} -c "import time; print(time.strftime('%Y%m%d-%H%M%S'))"
+
   app:deploy:
     desc: Apply the last built overlay and wait for the rollout
     cmds:
@@ -258,10 +270,14 @@ tasks:
   up:
     desc: Whole lab from zero (cluster, platform, app, index)
     cmds:
-      - task: cluster:up
-      - task: platform:up        # submitted, not awaited: the platform starts while the app is built
-      - task: app
+      - task: up:start
+      - task: platform:up        # submitted, not awaited: the platform starts while the app is deployed
+      - task: app                # its image build is a cache hit: up:start already built it
       - task: platform:wait
+
+  up:start:
+    internal: true
+    deps: [cluster:up, app:image]      # in parallel: neither needs the other
 
   ask:
     desc: 'Ask the deployed RAG one question (Q="How do taints and tolerations work?")'
