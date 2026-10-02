@@ -7,7 +7,8 @@
 # Permissions: none by default, read-only on the code per job. No job needs a secret; the
 # workflow never runs on `pull_request_target`, so a pull request from a fork cannot reach one.
 #
-# The cluster suite (task test:k8s) needs k3d and ~4 GB: it stays local for now.
+# The cluster job (k3d, the whole platform) runs on main, weekly, on demand, and on pull requests
+# labelled `cluster-e2e`: see the job.
 name: CI
 
 on:
@@ -148,3 +149,55 @@ jobs:
           repo-token: ${{ github.token }}
       - run: task setup
       - run: task scan:image       # builds from uv.lock, fails on a fixable HIGH or CRITICAL
+
+  cluster:
+    name: cluster end to end (k3d, fake models)
+    # The whole lab on a real cluster: `task up`, then the same suites a developer runs. Heavier
+    # than the other jobs, so not on every push of a pull request: it runs on main, on the weekly
+    # schedule, on demand, and on a pull request that carries the `cluster-e2e` label.
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'cluster-e2e')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      K3D_VERSION: v5.9.0
+      K3D_SHA256: 06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0   # k3d-linux-amd64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7   # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          save-cache: false
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e   # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ github.token }}
+      - name: Free disk space
+        # The runner image ships toolchains this job never uses, and leaves about 14 GB free:
+        # not enough for the node images. Above 85% the kubelet reports disk pressure and Loki
+        # stops accepting logs.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Install k3d (checksum verified)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/k3d" "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          echo "${K3D_SHA256}  $RUNNER_TEMP/k3d" | sha256sum --check
+          sudo install -m 0755 "$RUNNER_TEMP/k3d" /usr/local/bin/k3d
+          k3d version && kubectl version --client && helm version --short
+      - run: task setup
+      - run: task up OVERLAY=fake
+      - run: task test:k8s         # through the Gateway: both replicas, conversations, data lake, SLO rules
+      - run: task test:stack       # one question's metrics, trace and logs in the cluster's backends
+      - name: Cluster state (on failure)
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide || true
+          kubectl get events -A --sort-by=.lastTimestamp | tail -n 60 || true
+          kubectl -n obslab logs deploy/obslab-api --tail=80 --all-containers || true
+          kubectl -n observability logs deploy/otel-collector --tail=80 || true
+          kubectl -n observability logs statefulset/loki --tail=400 | grep -v 'component=querier\|component=frontend' | tail -n 60 || true
+          df -h / || true
