@@ -191,3 +191,5 @@ jobs:
           kubectl get pods -A -o wide || true
           kubectl get events -A --sort-by=.lastTimestamp | tail -n 60 || true
           kubectl -n obslab logs deploy/obslab-api --tail=80 --all-containers || true
+          kubectl -n observability logs deploy/otel-collector --tail=80 || true
+          kubectl -n observability logs statefulset/loki --tail=80 || true
