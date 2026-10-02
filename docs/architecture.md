@@ -22,19 +22,68 @@ to the Gateway (`obslab.dev/gateway-access=true`).
 1. `POST /ask` arrives through the Gateway (Traefik) and reaches the API pod.
 2. FastAPI auto-instrumentation opens the root span `POST /ask`.
 3. The LangGraph flow runs. A callback handler turns each node into a span
-   (`rag.node retrieve`, `rag.node generate`...), all under `invoke_workflow rag`.
-4. Retrieval embeds the question (`embeddings nomic-embed-text` span) and asks PostgreSQL for
+   (`rag.node retrieve`, `rag.node generate`...), all under `invoke_workflow rag`, which carries
+   the conversation id.
+4. `condense` loads the last turns of the conversation. On a first question it does nothing; on
+   a follow-up, one short model call rewrites it as a standalone question.
+5. Retrieval embeds that question (`embeddings nomic-embed-text` span) and asks PostgreSQL for
    the closest chunks by cosine distance (`SELECT rag.chunks` database span, HNSW index).
    If nothing scores above `OBSLAB_MIN_SCORE`, the question is rewritten once, then the
    flow falls back to "I don't know".
-5. Generation streams the answer (`chat llama3.2:3b` span, with time to first chunk and
+6. Generation streams the answer (`chat llama3.2:3b` span, with time to first chunk and
    token usage), then a cheap groundedness score is computed.
-6. The API returns the answer, its sources and the trace ID.
+7. The turn (question and answer) is saved with the conversation, and the API returns the
+   answer, its sources, the conversation id and the trace ID.
 
 Everything the pod emits goes over OTLP/HTTP to the Collector, which adds Kubernetes metadata
 (pod, deployment, node) and sends traces to Tempo, logs to Loki, and exposes metrics that
 Prometheus scrapes. The same trace ID is on the spans, on the log records and on histogram
 exemplars, so Grafana can jump between the three.
+
+## Conversations
+
+`POST /ask` accepts a `conversation_id`. Without one, a new conversation starts and its id comes
+back with the answer; sending it with the next question continues the conversation.
+
+```
+POST /ask {"question": "How do taints and tolerations work?"}
+  -> {"answer": "...", "conversation_id": "6f0c...", "turn": 1}
+POST /ask {"question": "And what about NoExecute?", "conversation_id": "6f0c..."}
+  -> {"answer": "...", "turn": 2, "standalone_question": "What does the NoExecute taint effect do?"}
+```
+
+A conversation is a LangGraph thread. The graph is compiled with a PostgreSQL checkpointer, so
+the state of a thread is loaded when its id comes back, on whichever replica gets the request.
+
+The history has one job: turning a follow-up into a standalone question. That question is what
+gets searched, and the answer is written from the retrieved notes only, as for a first question.
+So the answer stays grounded in the notes, and the generation prompt does not grow with the
+conversation.
+
+A small model sometimes rewrites a follow-up into a question about the previous subject. A
+rewrite should only add what "it" or "that" stood for, so it is accepted only if it still
+contains the words of the follow-up; otherwise the question is searched as typed. The answer
+returns the question that was searched (`standalone_question`).
+
+What keeps the cost bounded:
+
+| Rule | Setting | Effect |
+|---|---|---|
+| No model call on a first question | | a one-off question costs what it did before |
+| A few turns of history, answers clipped | `OBSLAB_HISTORY_TURNS` (3) | the condense prompt has a fixed upper size |
+| One checkpoint per answered question | | one database write per turn, not one per graph node |
+| No retrieved chunk in a checkpoint | | a saved turn is a few hundred bytes of text |
+| Maximum length | `OBSLAB_MAX_TURNS` (20) | the API answers 409 and asks for a new conversation |
+| Retention | `OBSLAB_CONVERSATION_TTL_DAYS` (7) | a nightly job deletes idle conversations |
+
+A turn counts once it is answered: when a model call fails, the history and the turn count stay
+as they were, and the client can retry.
+
+The conversation id is a UUID. It is written on the workflow span (`gen_ai.conversation.id`) and
+on the log line, never on a metric: one label value per conversation would be unbounded.
+
+In the database the conversations have their own schema (`chat`) and their own role
+(`obslab_chat`), which cannot read the index. The API keeps its read-only role for the index.
 
 ## The index
 
@@ -110,6 +159,13 @@ only recorded on spans when `OBSLAB_CAPTURE_CONTENT=true`.
 **PostgreSQL + pgvector.** The index is shared, so the API is stateless: two replicas, rolling
 updates without downtime, re-indexing without a restart. It is the only copy of the index: nothing is kept in a local file. The unit tests replace it
 with an in-memory double.
+
+**Conversation memory in PostgreSQL, used for the question only.** The LangGraph checkpointer
+with PostgreSQL makes the history available to every replica with no new service. The history
+resolves the follow-up and is not passed to the answer: passing it would grow every prompt
+with the conversation and let the model answer from its own earlier answers instead of the
+notes. The trade-off: a request such as "repeat your last answer" is searched again in the notes
+instead of being read back from the history.
 
 **A data lake for the notes.** The notes are data, so they stay out of the image: a folder on
 the host (`DATALAKE`, default `datalake/`), mounted read-only into the cluster nodes and handed

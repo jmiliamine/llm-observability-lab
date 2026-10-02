@@ -53,6 +53,9 @@ spec:
             - {name: PGUSER, value: obslab_reader}
             - name: PGPASSWORD
               valueFrom: {secretKeyRef: {name: obslab-db, key: reader-password}}
+            # Conversations: a second role that owns the `chat` schema and cannot read the index.
+            - name: OBSLAB_CHAT_PASSWORD
+              valueFrom: {secretKeyRef: {name: obslab-db, key: chat-password}}
             # Downward API: the pod tells OpenTelemetry who it is (resource attributes on every
             # span/metric/log). The collector's k8sattributes processor adds the rest.
             - name: K8S_POD_NAME

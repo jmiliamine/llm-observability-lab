@@ -114,6 +114,22 @@ panels.append({"type": "logs", "title": "Application logs (click a trace_id to o
                "options": {"showTime": True, "wrapLogMessage": True}})
 advance()
 
+row("Conversations")
+ts("Questions / min: first vs follow-up", [
+    ('sum(rate(rag_conversation_turn_bucket{le="1.0"}[$__rate_interval])) * 60', "first question"),
+    ('(sum(rate(rag_conversation_turn_count[$__rate_interval])) '
+     '- sum(rate(rag_conversation_turn_bucket{le="1.0"}[$__rate_interval]))) * 60', "follow-up")], "short", 0, 8,
+   desc="A follow-up costs one more short model call (the condense step) before the search.")
+ts("Conversation depth (turn number)", [(HQ.format(q=q, by="", m="rag_conversation_turn"), f"p{int(q*100)}")
+                                        for q in (0.5, 0.95)], "short", 8, 8,
+   desc="Position of the questions in their conversation. Capped by OBSLAB_MAX_TURNS.")
+ts("Condense step duration (p50 / p95)", [
+    (HQ.format(q=q, by="", m='rag_graph_node_duration_seconds').replace(
+        "rag_graph_node_duration_seconds_bucket", 'rag_graph_node_duration_seconds_bucket{langgraph_node="condense"}'),
+     f"p{int(q*100)}") for q in (0.5, 0.95)], "s", 16, 8,
+   desc="Near zero on a first question (no model call); on a follow-up, the time to rewrite it as a standalone question.")
+advance()
+
 dashboard = {
     "uid": "obslab-rag", "title": "LLM / RAG overview", "tags": ["llm", "rag", "opentelemetry"],
     "timezone": "browser", "schemaVersion": 39, "refresh": "10s",

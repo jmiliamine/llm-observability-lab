@@ -58,6 +58,8 @@ spec:
               valueFrom: {secretKeyRef: {name: obslab-db, key: writer-password}}
             - name: OBSLAB_READER_PASSWORD
               valueFrom: {secretKeyRef: {name: obslab-db, key: reader-password}}
+            - name: OBSLAB_CHAT_PASSWORD
+              valueFrom: {secretKeyRef: {name: obslab-db, key: chat-password}}
           # A few thousand chunks: shared_buffers stays at its default, memory is mostly page cache.
           resources:
             requests: {cpu: 50m, memory: 128Mi}
@@ -111,6 +113,6 @@ spec:
     - from:
         - podSelector:
             matchExpressions:
-              - {key: app.kubernetes.io/name, operator: In, values: [obslab-api, obslab-ingest]}
+              - {key: app.kubernetes.io/name, operator: In, values: [obslab-api, obslab-ingest, obslab-purge]}
       ports:
         - port: 5432
