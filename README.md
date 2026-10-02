@@ -147,22 +147,6 @@ task up DATALAKE=D:/path/to/notes
 The notes are only read from that folder and indexed into a local database. Nothing leaves your
 machine, since the models run locally too.
 
-## Lighter option: Docker Compose
-
-If you only want the observability stack and PostgreSQL (about 1.5 GB instead of 4 GB) with
-the app running on your machine:
-
-```bash
-task stack:up
-```
-
-```bash
-task stack:ingest
-```
-
-Grafana is then on http://localhost:3000, PostgreSQL on `localhost:5432`, and the app exports
-to `localhost:4318`, like in the cluster. `task stack:down` stops it.
-
 ## Tests
 
 The first three run in CI on every push. Details in [tests/README.md](tests/README.md).
@@ -186,7 +170,7 @@ Each code folder has its own README.
 src/obslab/      the app: RAG graph, models, vector store, telemetry, API, CLI
 tests/           unit, integration and end-to-end suites
 deploy/k8s/      the cluster: k3d definition, platform (Helm values), app (Kustomize)
-deploy/compose/  the same backends with Docker Compose
+deploy/compose/  the backends the tests need, with Docker Compose
 deploy/shared/   alert rules, dashboard and database setup used by both
 datalake/        the notes to index: the sample notes, or point DATALAKE at your own folder
 scripts/         helpers behind the Task commands
@@ -198,7 +182,7 @@ docs/            architecture and troubleshooting
 - One PostgreSQL instance, no replication and no scheduled backups. Fine for a lab.
 - Questions and answers are kept in PostgreSQL for the conversation history, 7 days by default
   (`OBSLAB_CONVERSATION_TTL_DAYS`).
-- Local use only. The UIs have no TLS, and anonymous access in the Compose stack is read-only.
+- Local use only. The UIs have no TLS.
 - A 3B model answers like a 3B model. The point is the telemetry around it, not the answers.
 
 Having trouble? See [docs/troubleshooting.md](docs/troubleshooting.md).
