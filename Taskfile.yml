@@ -197,8 +197,9 @@ tasks:
     status: ['kubectl -n obslab get secret obslab-db']       # created once, never rotated silently
     cmds:
       - kubectl apply -f {{.APP_DIR}}/base/namespace.yaml
-      - kubectl -n obslab create secret generic obslab-db --from-literal=admin-password={{.ADMIN}} --from-literal=writer-password={{.WRITER}} --from-literal=reader-password={{.READER}}
+      - kubectl -n obslab create secret generic obslab-db --from-literal=admin-password={{.ADMIN}} --from-literal=writer-password={{.WRITER}} --from-literal=reader-password={{.READER}} --from-literal=chat-password={{.CHAT}}
     vars:
+      CHAT: {sh: '{{.PY}} -c "import secrets; print(secrets.token_urlsafe(24))"'}
       ADMIN: {sh: '{{.PY}} -c "import secrets; print(secrets.token_urlsafe(24))"'}
       WRITER: {sh: '{{.PY}} -c "import secrets; print(secrets.token_urlsafe(24))"'}
       READER: {sh: '{{.PY}} -c "import secrets; print(secrets.token_urlsafe(24))"'}
@@ -251,6 +252,11 @@ tasks:
     requires: {vars: [Q]}
     cmds: ['{{.PY}} -m obslab ask "{{.Q}}" --url http://127.0.0.1:8080 --host-header rag.localhost:8080']
 
+  chat:
+    desc: Talk to the deployed RAG, several questions in one conversation
+    interactive: true
+    cmds: ['{{.PY}} -m obslab chat --url http://127.0.0.1:8080 --host-header rag.localhost:8080']
+
   load:
     desc: Send traffic to the deployed RAG to feed the dashboards (N=30)
     cmds: ['{{.PY}} -m obslab load --url http://127.0.0.1:8080 --host-header rag.localhost:8080 --n {{.N | default 30}}']
@@ -286,6 +292,7 @@ tasks:
       PGDATABASE: obslab
       PGUSER: obslab_reader
       PGPASSWORD: '{{.OBSLAB_READER_PASSWORD | default "reader-local"}}'
+      OBSLAB_CHAT_PASSWORD: '{{.OBSLAB_CHAT_PASSWORD | default "chat-local"}}'
     cmds: ['{{.PY}} -m pytest -m stack -q -rs']
 
   test:k8s:
@@ -295,7 +302,7 @@ tasks:
     cmds: ['{{.PY}} -m pytest -m k8s -q -rs']
 
   test:pgvector:
-    desc: The pgvector store and its guardrails against a real PostgreSQL (starts the compose service)
+    desc: The pgvector store, the data lake and the conversations against a real PostgreSQL (starts the compose service)
     cmds:
       - docker compose -f deploy/compose/docker-compose.yml up -d --wait postgres
       - '{{.PY}} -m pytest -m pgvector -q -rs'

@@ -23,6 +23,11 @@ data:
   PGDATABASE: obslab
   PGCONNECT_TIMEOUT: "3"
   OBSLAB_DB_TIMEOUT_MS: "5000"                               # statement timeout on vector queries
+  # Conversations: turns of history used to understand a follow-up, questions allowed in one
+  # conversation, and days an idle conversation is kept before the purge job deletes it.
+  OBSLAB_HISTORY_TURNS: "3"
+  OBSLAB_MAX_TURNS: "20"
+  OBSLAB_CONVERSATION_TTL_DAYS: "7"
   OBSLAB_TOP_K: "4"
   OBSLAB_MIN_SCORE: "0.6"                                      # calibrated for nomic-embed-text (fake overlay: 0.2)
   # API-equivalent cost, in USD per 1M tokens, at the list price of a small hosted model: the local

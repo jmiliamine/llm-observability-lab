@@ -9,6 +9,9 @@ OBSLAB_DB_TIMEOUT_MS     statement timeout for vector queries, default 5000
 OBSLAB_TELEMETRY         otlp | console | none    (tests inject in-memory exporters directly)
 OTEL_EXPORTER_OTLP_ENDPOINT  default http://localhost:4318 (the collector)
 OBSLAB_CAPTURE_CONTENT   true to record prompts/answers on spans (opt-in, off by default)
+OBSLAB_HISTORY_TURNS     past turns used to understand a follow-up question, default 3 (0..10)
+OBSLAB_MAX_TURNS         questions allowed in one conversation, default 20
+OBSLAB_CONVERSATION_TTL_DAYS  idle conversations older than this are purged, default 7
 OBSLAB_TOP_K / OBSLAB_MIN_SCORE   retrieval tuning (validated: 1..20 and 0..1)
 OBSLAB_PRICE_IN / OBSLAB_PRICE_OUT  USD per 1M tokens, to chart an "API-equivalent" cost
 OBSLAB_ENVIRONMENT       deployment.environment.name resource attribute (local, k3d, ...)
@@ -41,6 +44,10 @@ class Settings:
     capture_content: bool = field(default_factory=lambda: _bool("OBSLAB_CAPTURE_CONTENT"))
     top_k: int = field(default_factory=lambda: int(os.environ.get("OBSLAB_TOP_K", "4")))
     min_score: float = field(default_factory=lambda: float(os.environ.get("OBSLAB_MIN_SCORE", "0.6")))
+    history_turns: int = field(default_factory=lambda: int(os.environ.get("OBSLAB_HISTORY_TURNS", "3")))
+    max_turns: int = field(default_factory=lambda: int(os.environ.get("OBSLAB_MAX_TURNS", "20")))
+    conversation_ttl_days: float = field(
+        default_factory=lambda: float(os.environ.get("OBSLAB_CONVERSATION_TTL_DAYS", "7")))
     price_in: float = field(default_factory=lambda: float(os.environ.get("OBSLAB_PRICE_IN", "0")))
     price_out: float = field(default_factory=lambda: float(os.environ.get("OBSLAB_PRICE_OUT", "0")))
     environment: str = field(default_factory=lambda: os.environ.get("OBSLAB_ENVIRONMENT", "local"))
@@ -55,6 +62,18 @@ class Settings:
             problems.append(f"OBSLAB_TOP_K={self.top_k} (expected 1..{MAX_TOP_K})")
         if not 0.0 <= self.min_score <= 1.0:
             problems.append(f"OBSLAB_MIN_SCORE={self.min_score} (expected 0..1)")
+        if not 0 <= self.history_turns <= 10:
+            problems.append(f"OBSLAB_HISTORY_TURNS={self.history_turns} (expected 0..10)")
+        if not 1 <= self.max_turns <= 200:
+            problems.append(f"OBSLAB_MAX_TURNS={self.max_turns} (expected 1..200)")
+        if self.conversation_ttl_days <= 0:
+            problems.append(f"OBSLAB_CONVERSATION_TTL_DAYS={self.conversation_ttl_days} (expected > 0)")
+        if not 0 <= self.history_turns <= 10:
+            problems.append(f"OBSLAB_HISTORY_TURNS={self.history_turns} (expected 0..10)")
+        if not 1 <= self.max_turns <= 200:
+            problems.append(f"OBSLAB_MAX_TURNS={self.max_turns} (expected 1..200)")
+        if self.conversation_ttl_days <= 0:
+            problems.append(f"OBSLAB_CONVERSATION_TTL_DAYS={self.conversation_ttl_days} (expected > 0)")
         if not 100 <= self.db_timeout_ms <= 60_000:
             problems.append(f"OBSLAB_DB_TIMEOUT_MS={self.db_timeout_ms} (expected 100..60000)")
         if problems:

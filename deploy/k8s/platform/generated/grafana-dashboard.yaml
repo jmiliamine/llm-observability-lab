@@ -724,6 +724,140 @@ data:
             "showTime": true,
             "wrapLogMessage": true
           }
+        },
+        {
+          "type": "row",
+          "title": "Conversations",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 48
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Questions / min: first vs follow-up",
+          "description": "A follow-up costs one more short model call (the condense step) before the search.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 49
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(rag_conversation_turn_bucket{le=\"1.0\"}[$__rate_interval])) * 60",
+              "legendFormat": "first question",
+              "refId": "A",
+              "exemplar": true
+            },
+            {
+              "expr": "(sum(rate(rag_conversation_turn_count[$__rate_interval])) - sum(rate(rag_conversation_turn_bucket{le=\"1.0\"}[$__rate_interval]))) * 60",
+              "legendFormat": "follow-up",
+              "refId": "B",
+              "exemplar": true
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Conversation depth (turn number)",
+          "description": "Position of the questions in their conversation. Capped by OBSLAB_MAX_TURNS.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 49
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.5, sum by (le) (rate(rag_conversation_turn_bucket[$__rate_interval])))",
+              "legendFormat": "p50",
+              "refId": "A",
+              "exemplar": true
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(rag_conversation_turn_bucket[$__rate_interval])))",
+              "legendFormat": "p95",
+              "refId": "B",
+              "exemplar": true
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Condense step duration (p50 / p95)",
+          "description": "Near zero on a first question (no model call); on a follow-up, the time to rewrite it as a standalone question.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 49
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.5, sum by (le) (rate(rag_graph_node_duration_seconds_bucket{langgraph_node=\"condense\"}[$__rate_interval])))",
+              "legendFormat": "p50",
+              "refId": "A",
+              "exemplar": true
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(rag_graph_node_duration_seconds_bucket{langgraph_node=\"condense\"}[$__rate_interval])))",
+              "legendFormat": "p95",
+              "refId": "B",
+              "exemplar": true
+            }
+          ]
         }
       ]
     }
