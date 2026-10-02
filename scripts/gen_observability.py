@@ -1,10 +1,10 @@
-"""Observability as code — one source, two deployment targets.
+"""Observability as code: the dashboard, the alert rules and the database setup, from one source.
 
   python scripts/gen_observability.py            write the files below
   python scripts/gen_observability.py --check    fail if they are out of date (CI, `task lint`)
 
 Writes:
-  deploy/shared/grafana/llm-rag-overview.json                  dashboard (compose mounts it)
+  deploy/shared/grafana/llm-rag-overview.json                  dashboard, readable and diffable
   deploy/k8s/platform/generated/grafana-dashboard.yaml         same JSON in a ConfigMap that the
                                                                Grafana sidecar picks up (label grafana_dashboard=1)
   deploy/k8s/platform/generated/prometheusrule-rag-slo.yaml    deploy/shared/prometheus/rag-slo.yml wrapped
@@ -13,7 +13,7 @@ Writes:
                                                                (Kustomize cannot read files outside its root)
 
 Why generate instead of hand-writing: the dashboard JSON is ~1 000 lines nobody should edit
-by hand, and keeping compose and Kubernetes on the *same* rules/dashboard avoids drift.
+by hand, and the rules and database setup are shared with the Compose test harness.
 
 Dashboard rows follow the questions an on-call asks, in order: is it up and fast (RED),
 what does the model cost (tokens), is retrieval working, are answers good.

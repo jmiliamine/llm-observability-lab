@@ -1,8 +1,9 @@
-# Lightweight fallback of the observability stack (the Kubernetes version in deploy/k8s is
-# the main target). Useful when the cluster is off, to save RAM, or for a quick CI smoke test.
-# The app and Ollama run on the host.
-#   task stack:up        (or: docker compose -f deploy/compose/docker-compose.yml up -d)
-# Grafana http://localhost:3000 · Prometheus :9090 · Tempo :3200 · Loki :3100
+# Test harness, not a way to run the lab: the backends the end-to-end tests query, started in
+# seconds on a developer machine and in CI. The lab itself runs on the cluster (deploy/k8s).
+# No Grafana here: the tests read Prometheus, Tempo and Loki directly.
+#   task test:compose    start it, index the sample notes, follow one question
+#   task test:pgvector   only PostgreSQL
+# Prometheus :9090 · Tempo :3200 · Loki :3100 · PostgreSQL :5432
 # Every port is bound to 127.0.0.1: nothing here has authentication worth exposing on a network.
 # App -> OTLP/HTTP localhost:4318 -> collector -> Prometheus (metrics), Tempo (traces), Loki (logs)
 name: obslab
@@ -51,27 +52,6 @@ services:
     ports: ["127.0.0.1:3100:3100"]
     restart: unless-stopped
 
-  grafana:
-    image: grafana/grafana:13.2.2
-    environment:
-      # Anonymous visitors can read the dashboards. Explore and editing need a sign-in:
-      # admin/admin, and Grafana asks for a new password on first login.
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_FEATURE_TOGGLES_traceToMetrics: "true"
-      # SQLite in WAL mode: the first start runs ~800 migrations, each waiting for an fsync
-      # with the default journal.
-      GF_DATABASE_WAL: "true"
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ../shared/grafana:/var/lib/grafana/dashboards:ro  # same dashboard as the k8s ConfigMap
-      - grafana-data:/var/lib/grafana
-    ports: ["127.0.0.1:3000:3000"]
-    depends_on: [prometheus, tempo, loki]
-    restart: unless-stopped
-
-  # Vector store. Same image and init script as the cluster. The passwords below
-  # are local-only defaults for a port bound to 127.0.0.1; override them in a .env file if you like.
   postgres:
     image: pgvector/pgvector:0.8.6-pg18-trixie
     environment:
@@ -96,5 +76,4 @@ services:
 
 volumes:
   prometheus-data:
-  grafana-data:
   postgres-data:

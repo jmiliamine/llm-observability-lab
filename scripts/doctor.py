@@ -26,7 +26,7 @@ from pathlib import Path
 
 # Tool -> why the lab needs it. Versions are printed, not enforced (except kubectl skew).
 TOOLS = {
-    "docker": "runs the k3d nodes and the compose stack",
+    "docker": "runs the k3d nodes and the test backends",
     "k3d": "creates the cluster",
     "kubectl": "talks to the cluster",
     "helm": "installs the platform charts",
