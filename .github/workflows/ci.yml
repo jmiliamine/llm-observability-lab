@@ -175,6 +175,13 @@ jobs:
         with:
           version: ${{ env.TASK_VERSION }}
           repo-token: ${{ github.token }}
+      - name: Free disk space
+        # The runner image ships toolchains this job never uses, and leaves about 14 GB free:
+        # not enough for the node images. Above 85% the kubelet reports disk pressure and Loki
+        # stops accepting logs.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
       - name: Install k3d (checksum verified)
         run: |
           curl -fsSL -o "$RUNNER_TEMP/k3d" "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
@@ -192,4 +199,5 @@ jobs:
           kubectl get events -A --sort-by=.lastTimestamp | tail -n 60 || true
           kubectl -n obslab logs deploy/obslab-api --tail=80 --all-containers || true
           kubectl -n observability logs deploy/otel-collector --tail=80 || true
-          kubectl -n observability logs statefulset/loki --tail=80 || true
+          kubectl -n observability logs statefulset/loki --tail=400 | grep -v 'component=querier\|component=frontend' | tail -n 60 || true
+          df -h / || true
