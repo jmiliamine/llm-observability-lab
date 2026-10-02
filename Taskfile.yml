@@ -106,9 +106,9 @@ tasks:
     desc: Regenerate the dashboard and the PrometheusRule from deploy/shared (compose and k8s)
     cmds: ['{{.PY}} scripts/gen_observability.py']
 
-  # ── Compose: the light stack, app on the host ───────────────────────────────
+  # ── Compose: the backends the tests need, app on the host ───────────────────
   stack:up:
-    desc: Start Prometheus, Tempo, Loki, Grafana and the collector with docker compose (~1.5 GB)
+    desc: Start the test backends with docker compose (collector, Prometheus, Tempo, Loki, PostgreSQL)
     cmds: ['docker compose -f deploy/compose/docker-compose.yml up -d --wait']
 
   stack:down:
