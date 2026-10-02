@@ -80,6 +80,7 @@ services:
       POSTGRES_PASSWORD: ${OBSLAB_PG_ADMIN_PASSWORD:-postgres-local}
       OBSLAB_WRITER_PASSWORD: ${OBSLAB_WRITER_PASSWORD:-writer-local}
       OBSLAB_READER_PASSWORD: ${OBSLAB_READER_PASSWORD:-reader-local}
+      OBSLAB_CHAT_PASSWORD: ${OBSLAB_CHAT_PASSWORD:-chat-local}
     volumes:
       - ../shared/postgres/init-obslab.sh:/docker-entrypoint-initdb.d/10-obslab.sh:ro
       - postgres-data:/var/lib/postgresql

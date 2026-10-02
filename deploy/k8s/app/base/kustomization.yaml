@@ -16,6 +16,7 @@ resources:
   - postgres.yaml
   - datalake.yaml
   - ingest-cronjob.yaml
+  - purge-cronjob.yaml
   - deployment.yaml
   - pdb.yaml
   - service.yaml

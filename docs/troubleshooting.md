@@ -64,6 +64,20 @@ when the nodes have no such mount: the cluster predates the data lake or was cre
 Recreate it with `task cluster:down` and `task up DATALAKE=...`. When the job runs but finds no
 notes, the folder is empty or holds no `.md` or `.txt` file; the previous index keeps serving.
 
+**`/ask` returns 502 and the API logs "password authentication failed for user obslab_chat".**
+The database volume was initialised before conversations existed, so the `obslab_chat` role and
+the `chat` schema are missing (the init script only runs on an empty volume). With Compose:
+`docker compose -f deploy/compose/docker-compose.yml down -v`, then `task stack:up` and
+`task stack:ingest`. In the cluster: delete the `obslab-db` Secret and the `data-postgres-0`
+claim as described above, then `task app`.
+
+**`/ask` returns 409.** The conversation reached `OBSLAB_MAX_TURNS`. Send the next question
+without `conversation_id` to start a new one.
+
+**Inspect the conversations.** `kubectl -n obslab exec -it postgres-0 -- psql -U postgres -d obslab`,
+then `SELECT thread_id, count(*) FROM chat.checkpoints GROUP BY 1;`. `obslab conversations purge
+--days 0` (with the chat role) deletes them all.
+
 **Inspect the index.** `kubectl -n obslab exec -it postgres-0 -- psql -U postgres -d obslab`,
 then `SELECT * FROM rag.index_meta;` or `SELECT source, count(*) FROM rag.chunks GROUP BY 1;`.
 

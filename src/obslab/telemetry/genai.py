@@ -88,6 +88,10 @@ class RagMetrics:
             "rag.answer.groundedness", unit="{score}",
             description="Share of answer content words found in the retrieved context (0-1).",
             explicit_bucket_boundaries_advisory=SCORE_BUCKETS)
+        self.turn = meter.create_histogram(
+            "rag.conversation.turn", unit="{turn}",
+            description="Position of each question in its conversation (1 = first question).",
+            explicit_bucket_boundaries_advisory=[1, 2, 3, 5, 8, 13, 21])
         self.node_duration = meter.create_histogram(
             "rag.graph.node.duration", unit="s", description="Duration of each LangGraph node.",
             explicit_bucket_boundaries_advisory=DURATION_BUCKETS)

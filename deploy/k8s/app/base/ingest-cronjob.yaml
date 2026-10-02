@@ -2,7 +2,7 @@
 # suspend: true = never runs on schedule; `task app:ingest` triggers it on demand with
 #   kubectl create job --from=cronjob/obslab-ingest obslab-ingest-<timestamp>
 # Flip suspend to false to re-index nightly (useful when the notes change often).
-# The job embeds the notes shipped in the image and swaps the new index in atomically: the API
+# The job embeds the notes of the data lake and swaps the new index in atomically: the API
 # keeps answering from the previous index until the new one is complete.
 apiVersion: batch/v1
 kind: CronJob

@@ -69,6 +69,8 @@ class HashingEmbeddings(Embeddings):
 class FakeChat(BaseChatModel):
     """Answers from the prompt itself, reports usage, supports streaming.
 
+    - the condense prompt ("Follow-up:") returns the follow-up, completed with the previous
+      question when it refers to it ("it", "that", "what about"...) or is very short
     - prompts containing "Rewrite" return a reformulated query
     - prompts containing "FAIL" raise (to test error paths)
     - otherwise returns the first sentence of the context block
@@ -91,6 +93,13 @@ class FakeChat(BaseChatModel):
         prompt = "\n".join(str(m.content) for m in messages)
         if "FAIL" in prompt:
             raise RuntimeError("fake provider failure")
+        if "Follow-up:" in prompt:
+            follow_up = prompt.rsplit("Follow-up:", 1)[-1].split("Standalone question:", 1)[0].strip()
+            asked = re.findall(r"^User: (.*)$", prompt, flags=re.MULTILINE)
+            words = set(re.findall(r"[a-z']+", follow_up.lower()))
+            dependent = len(words) < 5 or words & {"it", "its", "they", "them", "their", "that", "this",
+                                                    "those", "these", "about", "also", "same"}
+            return f"{follow_up} {asked[-1]}" if dependent and asked else follow_up
         if "Rewrite" in prompt:
             q = prompt.rsplit("Question:", 1)[-1].strip()
             return f"{q} definition explanation"

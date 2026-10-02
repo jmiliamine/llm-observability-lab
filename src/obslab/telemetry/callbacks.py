@@ -2,7 +2,8 @@
 
 Span tree produced for one question:
 
-  invoke_workflow rag                  (graph run, INTERNAL)
+  invoke_workflow rag                  (graph run, INTERNAL, carries gen_ai.conversation.id)
+  ├── rag.node condense                (a chat span under it on follow-up questions only)
   ├── rag.node retrieve                (one span per LangGraph node)
   │   ├── embeddings nomic-embed-text  (InstrumentedEmbeddings, CLIENT)
   │   └── retrieval index              (explicit span in the node)
@@ -95,8 +96,10 @@ class OTelCallbackHandler(BaseCallbackHandler):
         name = kw.get("name") or (serialized or {}).get("name", "chain")
         metadata = metadata or {}
         if parent_run_id is None:
-            self._start(run_id, None, f"invoke_workflow {self.workflow_name}", SpanKind.INTERNAL,
-                        {OP: "invoke_workflow", "gen_ai.workflow.name": self.workflow_name}, "workflow")
+            attrs = {OP: "invoke_workflow", "gen_ai.workflow.name": self.workflow_name}
+            if metadata.get("thread_id"):       # on the span only: an id is never a metric label
+                attrs["gen_ai.conversation.id"] = str(metadata["thread_id"])
+            self._start(run_id, None, f"invoke_workflow {self.workflow_name}", SpanKind.INTERNAL, attrs, "workflow")
         elif metadata.get("langgraph_node") == name and not name.startswith("__"):
             self._start(run_id, parent_run_id, f"rag.node {name}", SpanKind.INTERNAL,
                         {"langgraph.node": name, "langgraph.step": int(metadata.get("langgraph_step", 0))}, "node")

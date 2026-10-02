@@ -28,6 +28,14 @@ the sample notes: a note added to the folder is answered after the next ingest, 
 is forgotten, files that are not `.md` or `.txt` are ignored, and an empty or missing folder
 fails without touching the index that is being served.
 
+**Conversations** (`unit/test_conversation.py` with in-memory checkpoints, `e2e/test_conversations.py`
+with PostgreSQL, same command as the vector store). A follow-up is answered thanks to the
+previous turn and not without it; the first question makes no extra model call; another
+replica, or the same one after a restart, continues the conversation; a failed turn changes
+nothing; the saved state is a few turns of text with one checkpoint per question; the length
+limit and the purge work; the conversation role cannot read the index and the index role
+cannot read the conversations.
+
 **Compose end to end** (`e2e/test_stack.py`). Starts Prometheus, Tempo, Loki, Grafana, the
 OpenTelemetry Collector and PostgreSQL with Docker Compose, indexes the sample notes, then asks
 one question and follows it:
@@ -42,12 +50,15 @@ runs with the fake provider.
 
 **Cluster end to end** (`e2e/test_cluster.py`, plus `test_stack.py` against the cluster). The
 same question through the Gateway: both API replicas answer, the trace carries the pod
-identity, metric labels stay bounded, the SLO rules are evaluated. A note added to the data lake
+identity, metric labels stay bounded, the SLO rules are evaluated. A conversation of five
+turns is served by both replicas, and the purge job runs. A note added to the data lake
 is served after the ingest job, with the same image and the same API pods, and only that job
 mounts the folder.
 
 **Real models** (`e2e/test_ollama.py`). With `llama3.2:3b` and `nomic-embed-text`: a question
-about the notes is answered from the right note, an off-topic question is declined.
+about the notes is answered from the right note, a follow-up is understood from the previous
+turn, a new subject in the same conversation is not dragged back to the old one, an off-topic
+question is declined.
 
 ## Conventions
 

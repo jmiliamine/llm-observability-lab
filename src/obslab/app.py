@@ -5,8 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 from .config import Settings
+from .rag import memory
 from .rag.graph import RagApp
 from .rag.pgvector import PgVectorStore, open_pool
 from .rag.providers import chat_model, embeddings
@@ -23,9 +26,12 @@ class Components:
     genai: GenAIMetrics
     rag: RagApp
     graph: object
+    conversations: BaseCheckpointSaver | None = None
 
-    def ask(self, question: str):
-        return self.rag.ask(question, self.graph)
+    def ask(self, question: str, conversation_id: str | None = None):
+        if isinstance(self.conversations, memory.ConversationStore):
+            self.conversations.ensure_tables()
+        return self.rag.ask(question, self.graph, conversation_id)
 
     def status(self) -> dict:
         """What /readyz reports. The vector store is checked on every call: the index can be
@@ -49,9 +55,10 @@ class Components:
         return body
 
     def close(self) -> None:
-        pool = getattr(self.rag.store, "pool", None)
-        if pool is not None:
-            pool.close()
+        for holder in (self.rag.store, self.conversations):
+            pool = getattr(holder, "pool", None)
+            if pool is not None:
+                pool.close()
 
 
 def open_store(settings: Settings, telemetry: Telemetry, emb) -> PgVectorStore:
@@ -60,18 +67,23 @@ def open_store(settings: Settings, telemetry: Telemetry, emb) -> PgVectorStore:
     return PgVectorStore(pool, emb, tracer=telemetry.tracer)
 
 
-def build_components(settings: Settings, telemetry: Telemetry,
-                     store: VectorStore | None = None) -> Components:
+def build_components(settings: Settings, telemetry: Telemetry, store: VectorStore | None = None,
+                     conversations: BaseCheckpointSaver | None = None) -> Components:
+    """Without arguments: the index and the conversations in PostgreSQL. The tests pass an
+    in-memory store, and then get in-memory conversations unless they pass their own."""
     genai = GenAIMetrics(telemetry.meter, settings.price_in, settings.price_out)
     rag_metrics = RagMetrics(telemetry.meter)
     emb = embeddings(settings, telemetry, genai)
+    if conversations is None:
+        conversations = (memory.ConversationStore(memory.open_pool(timeout_ms=settings.db_timeout_ms))
+                         if store is None else InMemorySaver())
     if store is None:
         store = open_store(settings, telemetry, emb)
     elif isinstance(store, InMemoryVectorStore):
         store.embedding = emb
     handler = OTelCallbackHandler(telemetry, genai, rag_metrics)
     rag = RagApp(settings, telemetry, store, chat_model(settings), handler, rag_metrics)
-    return Components(settings, telemetry, genai, rag, rag.build())
+    return Components(settings, telemetry, genai, rag, rag.build(conversations), conversations)
 
 
 def check_index_meta(settings: Settings, meta: dict) -> str | None:

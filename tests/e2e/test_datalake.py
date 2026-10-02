@@ -19,6 +19,7 @@ pytestmark = pytest.mark.pgvector
 
 WRITER = os.environ.get("PG_WRITER_DSN", "postgresql://obslab_writer:writer-local@127.0.0.1:5432/obslab")
 READER = os.environ.get("PG_READER_DSN", "postgresql://obslab_reader:reader-local@127.0.0.1:5432/obslab")
+CHAT_PASSWORD = os.environ.get("OBSLAB_CHAT_PASSWORD", "chat-local")
 SAMPLES = Path(__file__).resolve().parents[2] / "datalake"
 NEW_NOTE = "runbooks/heliotrope-freeze.md"
 NEW_TEXT = ("# Heliotrope deploy freeze\n\nThe Heliotrope deploy freeze starts every Thursday at 16:00 and ends "
@@ -62,6 +63,7 @@ def ask(monkeypatch, question: str) -> tuple[dict, dict]:
     from obslab.config import Settings
     from obslab.telemetry import init_telemetry
     _as(monkeypatch, READER)
+    monkeypatch.setenv("OBSLAB_CHAT_PASSWORD", CHAT_PASSWORD)       # the API also keeps conversations
     settings = Settings()
     tel = init_telemetry(settings)
     c = build_components(settings, tel)

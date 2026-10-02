@@ -30,15 +30,19 @@ question you can see how long each step took, how many tokens it used, why it en
 
 ## Architecture
 
-![A question goes through the Gateway to the RAG API. The API searches the pgvector index in PostgreSQL, calls Ollama for embeddings and answers, and sends traces, metrics and logs to the OpenTelemetry Collector, which forwards them to Tempo, Loki and Prometheus. Grafana reads all three. The ingest job reads the notes from the data lake, a host folder mounted read-only, and writes the index.](docs/img/architecture.svg)
+![A question goes through the Gateway to the RAG API. The API searches the pgvector index in PostgreSQL, keeps the conversation history there too, calls Ollama for embeddings and answers, and sends traces, metrics and logs to the OpenTelemetry Collector, which forwards them to Tempo, Loki and Prometheus. Grafana reads all three. The ingest job reads the notes from the data lake, a host folder mounted read-only, and writes the index.](docs/img/architecture.svg)
 
 More detail, including what each namespace owns and how a request is traced, in
 [docs/architecture.md](docs/architecture.md).
 
 ## What is in the box
 
-- **The app.** A LangGraph flow: `retrieve → generate → grade`, with one query rewrite
+- **The app.** A LangGraph flow: `condense → retrieve → generate → grade`, with one query rewrite
   before giving up. Served by FastAPI (two replicas), local models through Ollama.
+- **Conversations.** A follow-up such as "and what about NoExecute?" is understood from the
+  previous turns. The history is a LangGraph thread checkpointed in PostgreSQL, so either
+  replica can continue a conversation. It is bounded: a few turns kept, one write per question,
+  a maximum length, and a nightly purge.
 - **The vector store.** PostgreSQL with pgvector. The API connects with a read-only role,
   and the ingest job rebuilds the index and swaps it in atomically. An index built with another
   embedding model is refused.
@@ -107,6 +111,7 @@ task load
 | What | Where |
 |---|---|
 | Ask a question | `task ask Q="How do taints and tolerations work?"` |
+| Have a conversation | `task chat`, then type questions one after the other |
 | Grafana | http://grafana.localhost:8080 (user `admin`, password from `task grafana:password`) |
 | Prometheus | http://prometheus.localhost:8080 |
 
@@ -165,13 +170,13 @@ The first three run in CI on every push. Details in [tests/README.md](tests/READ
 | Command | What it proves | Needs |
 |---|---|---|
 | `task test` | The graph, the telemetry (in-memory exporters), the API, the sample corpus, input and error guardrails. Outbound network is blocked. | nothing |
-| `task test:pgvector` | Same ranking as the in-memory store, read-only API role, atomic re-index, model mismatch refused, query timeout | Docker (starts PostgreSQL) |
+| `task test:pgvector` | Same ranking as the in-memory store, read-only API role, atomic re-index, model mismatch refused, query timeout. The data lake drives the index. A conversation continues on another replica and after a restart, stays small, is purged | Docker (starts PostgreSQL) |
 | `task lint` | Ruff, generated files in sync, both Kustomize overlays render | kubectl |
 | `task scan` | Security scans: workflow audit, secrets, dependency and image vulnerabilities, manifest misconfigurations | Docker |
 | `task test:compose` | Starts the Compose stack, indexes the sample notes, then follows one question: answer, metrics in Prometheus, full trace in Tempo (SQL span included), log line in Loki | Docker |
 | `task test:stack` | The same telemetry checks against the cluster's platform | the cluster |
 | `task test:k8s` | Through the Gateway: answer from pgvector, both replicas serving, pod identity on the trace, clean metric labels, SLO rules evaluated | the cluster |
-| `task test:ollama` | The real models answer from the right note, and off-topic questions still fall back | Ollama |
+| `task test:ollama` | The real models answer from the right note, understand a follow-up from the previous turn, and off-topic questions still fall back | Ollama |
 
 ## Layout
 

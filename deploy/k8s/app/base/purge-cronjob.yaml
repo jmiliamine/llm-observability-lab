@@ -1,0 +1,50 @@
+# Retention of the conversations: every night, delete those idle for more than
+# OBSLAB_CONVERSATION_TTL_DAYS (configmap, 7 days by default). Without it the `chat` schema
+# would grow with every question ever asked, and keep what people typed for ever.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: obslab-purge
+spec:
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: obslab-purge
+        spec:
+          serviceAccountName: obslab
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: purge
+              image: obslab                  # replaced by the overlay (registry + immutable tag)
+              args: ["conversations", "purge"]
+              envFrom:
+                - configMapRef: {name: obslab-config}
+              env:
+                - name: OBSLAB_CHAT_PASSWORD
+                  valueFrom: {secretKeyRef: {name: obslab-db, key: chat-password}}
+              resources:
+                requests: {cpu: 20m, memory: 96Mi}
+                limits: {memory: 256Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir: {sizeLimit: 16Mi}

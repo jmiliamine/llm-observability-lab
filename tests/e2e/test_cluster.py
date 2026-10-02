@@ -114,6 +114,28 @@ def test_both_replicas_serve_from_the_shared_index(answer):
     assert len(pods - {None}) >= 2, f"answers came from {pods}"
 
 
+# ── Conversations: the history is in PostgreSQL, so either replica can continue one ──
+def test_a_conversation_through_the_gateway(answer):
+    first = request(f"{RAG}/ask", {"question": "How do taints and tolerations work?"}, timeout=180)
+    assert first["turn"] == 1 and first["conversation_id"]
+    # urllib opens a new connection per request: over a few follow-ups both replicas are hit
+    for turn in range(2, 6):
+        r = request(f"{RAG}/ask", {"question": "And what effect does NoExecute have on them?",
+                                   "conversation_id": first["conversation_id"]}, timeout=180)
+        assert r["turn"] == turn and r["conversation_id"] == first["conversation_id"], r
+        assert r["route"] == "answered" and "kubernetes/taints-and-tolerations.md" in r["sources"], r
+    assert "taint" in r["standalone_question"].lower()
+
+
+def test_conversations_are_purged_on_a_schedule(answer):
+    cron = json.loads(kubectl("get", "cronjob", "obslab-purge", "-o", "json"))
+    assert cron["spec"].get("suspend") is not True
+    job = f"obslab-purge-test-{int(time.time())}"
+    kubectl("create", "job", job, "--from=cronjob/obslab-purge")
+    kubectl("wait", "--for=condition=complete", f"job/{job}", "--timeout=5m")
+    assert "purged" in kubectl("logs", f"job/{job}")
+
+
 # ── The data lake: notes change, the image and the API pods do not ──────────────
 DATALAKE = Path(os.environ.get("OBSLAB_DATALAKE", Path(__file__).resolve().parents[2] / "datalake"))
 NEW_NOTE = "runbooks/heliotrope-freeze.md"

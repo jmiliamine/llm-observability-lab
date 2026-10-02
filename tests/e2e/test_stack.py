@@ -68,6 +68,7 @@ def asked():
     with tel.tracer.start_as_current_span("stack-test") as span:
         result = c.ask("How do you back up and restore etcd?")
         trace_id = format(span.get_span_context().trace_id, "032x")
+        result["follow_up"] = c.ask("How often should that be done?", result["conversation_id"])
     c.close()
     tel.shutdown()          # flushes spans, metrics and logs
     return result, trace_id
@@ -92,6 +93,13 @@ def test_question_is_answered(asked):
     assert any("etcd" in s for s in result["sources"])
 
 
+def test_a_follow_up_continues_the_conversation(asked):
+    follow_up = asked[0]["follow_up"]
+    assert follow_up["turn"] == 2 and follow_up["conversation_id"] == asked[0]["conversation_id"]
+    if os.environ.get("OBSLAB_PROVIDER", "ollama") == "fake":      # deterministic with the fake model
+        assert follow_up["route"] == "answered" and any("etcd" in s for s in follow_up["sources"])
+
+
 def test_metrics_reach_prometheus(asked):
     # The collector's Prometheus exporter maps service.instance.id to the `instance` label.
     q = urllib.parse.quote('sum(gen_ai_client_operation_duration_seconds_count'
@@ -111,6 +119,8 @@ def test_trace_reaches_tempo(asked):
 
     text = _poll(complete_trace)
     assert text is not None, f"complete trace {trace_id} not found in Tempo"
+    assert asked[0]["conversation_id"] in text, "gen_ai.conversation.id is missing from the workflow span"
+    assert "rag.node condense" in text
     if STORE == "pgvector":
         assert "SELECT rag.chunks" in text, "the vector query span is missing from the trace"
 

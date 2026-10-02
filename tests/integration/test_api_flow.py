@@ -67,3 +67,32 @@ def test_fastapi_does_not_add_a_second_exporter(components, otel, monkeypatch):
     with TestClient(create_app(components)):            # runs the lifespan startup
         pass
     assert len(tel.tracer_provider._active_span_processor._span_processors) == before
+
+
+def test_a_conversation_through_the_api(components):
+    client = TestClient(create_app(components))
+    first = client.post("/ask", json={"question": "How do you back up etcd?"}).json()
+    assert first["turn"] == 1 and first["conversation_id"]
+
+    second = client.post("/ask", json={"question": "How often should that be done?",
+                                       "conversation_id": first["conversation_id"]})
+    assert second.status_code == 200, second.text
+    body = second.json()
+    assert body["conversation_id"] == first["conversation_id"] and body["turn"] == 2
+    assert body["route"] == "answered" and body["sources"] == ["etcd.md"]
+    assert "etcd" in body["standalone_question"]
+
+
+def test_conversation_guardrails_through_the_api(settings, otel, store):
+    import dataclasses
+
+    from obslab.app import build_components
+    client = TestClient(create_app(build_components(dataclasses.replace(settings, max_turns=1), otel[0], store=store)))
+    # only a UUID is accepted: the value becomes a database key and a span attribute
+    for bad in ("42", "../../etc/passwd", "x" * 5000, "'; DROP TABLE checkpoints; --"):
+        assert client.post("/ask", json={"question": "How do you back up etcd?",
+                                         "conversation_id": bad}).status_code == 422
+    first = client.post("/ask", json={"question": "How do you back up etcd?"}).json()
+    full = client.post("/ask", json={"question": "How often should that be done?",
+                                     "conversation_id": first["conversation_id"]})
+    assert full.status_code == 409 and "new conversation" in full.json()["detail"]

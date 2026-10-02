@@ -11,6 +11,8 @@
   endpoints -- errors are better surfaced as 502s and alerts than as a silent outage.
 - On shutdown (SIGTERM from Kubernetes) the lifespan hook flushes spans, metrics and
   logs still buffered in the batch processors, so the last requests are not lost.
+- /ask takes an optional conversation_id (returned by the previous answer). The history
+  lives in PostgreSQL, so any replica can serve the next question of a conversation.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Response
 from opentelemetry import trace
@@ -25,12 +28,16 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pydantic import BaseModel, Field
 
 from .app import Components
+from .rag.graph import ConversationTooLongError
 
 log = logging.getLogger("obslab.api")
 
 
 class Ask(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
+    # Returned by a previous answer; omit it to start a new conversation. A UUID and nothing else:
+    # the value ends up in a database key and on spans.
+    conversation_id: UUID | None = None
 
 
 def create_app(components: Components) -> FastAPI:
@@ -70,7 +77,9 @@ def create_app(components: Components) -> FastAPI:
     @app.post("/ask")
     def ask(body: Ask):
         try:
-            result = components.ask(body.question)
+            result = components.ask(body.question, str(body.conversation_id) if body.conversation_id else None)
+        except ConversationTooLongError as e:
+            raise HTTPException(status_code=409, detail=f"{e}: start a new conversation") from e
         except Exception as e:
             # 502: a dependency (model, vector database) failed. Only the error type goes back to the
             # client; the full message, which can name hosts or users, stays on the trace.

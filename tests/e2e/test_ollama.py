@@ -45,5 +45,21 @@ def test_in_domain_question_is_answered_from_the_right_note(rag):
     assert "toleration" in r["answer"].lower()
 
 
+def test_a_follow_up_is_understood_from_the_previous_turn(rag):
+    first = rag.ask("How do taints and tolerations work?")
+    second = rag.ask("And what does the NoExecute effect do?", first["conversation_id"])
+    assert second["turn"] == 2
+    assert second["standalone_question"] != "And what does the NoExecute effect do?"    # it was rewritten
+    assert second["route"] == "answered", second
+    assert "kubernetes/taints-and-tolerations.md" in second["sources"]
+    assert "evict" in second["answer"].lower(), second["answer"]
+
+
+def test_a_new_subject_in_the_same_conversation_is_not_dragged_back(rag):
+    first = rag.ask("How do taints and tolerations work?")
+    second = rag.ask("How do you back up and restore etcd?", first["conversation_id"])
+    assert second["route"] == "answered" and "kubernetes/etcd-backup.md" in second["sources"], second
+
+
 def test_off_topic_question_falls_back(rag):
     assert rag.ask("What is the best recipe for a chocolate cake?")["route"] == "fallback"
