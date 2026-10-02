@@ -183,6 +183,13 @@ or missing folder fails the job before the database is touched, so the current i
 serving. In production the same job would read from object storage; a folder keeps the lab to
 one less service.
 
+**The platform starts in the background.** `task up` submits the four Helm releases without
+waiting, builds and deploys the app while their images are pulled, and checks at the end that
+everything is Ready (`task platform:wait`). Grafana keeps its own database in memory: its
+dashboards and datasources are code, and its first-start migrations take seconds there instead
+of minutes on a virtual disk. The image is built after the cluster exists, not during its
+creation: on a small machine the two compete for the Docker engine and node creation times out.
+
 **k3d for the cluster.** k3s in Docker gives a real control-plane and worker split for about
 500 MB per node, with Traefik, storage and a load balancer included. `task stop` gives the
 memory back in seconds.

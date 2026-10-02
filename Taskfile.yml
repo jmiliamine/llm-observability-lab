@@ -4,7 +4,7 @@
 #   task doctor              check tools, Docker memory, ports, Ollama
 #   task setup               Python 3.14 + dependencies (uv)
 #   task test                unit + integration tests, offline
-#   task up                  cluster, platform, app, index (~15 min the first time)
+#   task up                  cluster, platform, app, index
 #   task up OVERLAY=fake     same, without Ollama or a GPU
 #   task stop / task start   pause the cluster and give the RAM back (state is kept)
 #   task --list              everything else
@@ -138,9 +138,10 @@ tasks:
       # Gateway API CRDs are NOT installed here: k3s's traefik-crd chart ships the version Traefik
       # supports and refuses CRDs it does not own.
       - kubectl apply -f deploy/k8s/platform/traefik-gateway.yaml
-      # k3s installs Traefik asynchronously (helm-install-traefik Job): wait for it, then for the pods.
-      - kubectl -n kube-system wait --for=condition=complete job/helm-install-traefik --timeout=300s
-      - kubectl -n kube-system rollout status deploy/traefik --timeout=180s
+      # k3s installs Traefik asynchronously, in two Jobs. Only the first one is awaited here: it
+      # brings the Gateway API CRDs that the next steps apply. Traefik itself starts in the
+      # background and is checked by `platform:wait`.
+      - kubectl -n kube-system wait --for=condition=complete job/helm-install-traefik-crd --timeout=300s
 
   stop:
     desc: Stop the cluster containers (frees ~4 GB RAM, keeps all data)
@@ -157,7 +158,7 @@ tasks:
 
   # ── Platform (what a platform team owns) ────────────────────────────────────
   platform:up:
-    desc: Install monitoring (kube-prometheus-stack) and observability (collector, Tempo, Loki)
+    desc: Install monitoring (kube-prometheus-stack) and observability (collector, Tempo, Loki), without waiting for the pods
     cmds:
       - kubectl apply -f deploy/k8s/platform/namespaces.yaml
       - task: grafana:secret
@@ -165,15 +166,32 @@ tasks:
       - helm repo add grafana-community https://grafana-community.github.io/helm-charts --force-update
       - helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update
       - helm repo update
-      # --wait: the next step only runs once the component is Ready (CRDs exist, pods up).
-      # The first one gets a long timeout: on a fresh cluster Grafana pulls ~460 MB and runs its
-      # first-start migrations, which can take 15 minutes on a slow disk.
-      - helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --version {{.KPS_VERSION}} -n monitoring -f {{.VALUES}}/kube-prometheus-stack.yaml --wait --timeout 25m
-      - helm upgrade --install loki grafana-community/loki --version {{.LOKI_VERSION}} -n observability -f {{.VALUES}}/loki.yaml --wait --timeout 10m
-      - helm upgrade --install tempo grafana-community/tempo --version {{.TEMPO_VERSION}} -n observability -f {{.VALUES}}/tempo.yaml --wait --timeout 10m
-      - helm upgrade --install otel-collector open-telemetry/opentelemetry-collector --version {{.OTEL_VERSION}} -n observability -f {{.VALUES}}/otel-collector.yaml --wait --timeout 5m
+      # No --wait: the four releases are submitted one after the other and their images are
+      # pulled at the same time, while `task up` goes on with the app. `platform:wait` checks
+      # that everything is Ready. The charts' CRDs are installed before Helm returns, so the
+      # next chart can already use them.
+      - helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --version {{.KPS_VERSION}} -n monitoring -f {{.VALUES}}/kube-prometheus-stack.yaml
+      - helm upgrade --install loki grafana-community/loki --version {{.LOKI_VERSION}} -n observability -f {{.VALUES}}/loki.yaml
+      - helm upgrade --install tempo grafana-community/tempo --version {{.TEMPO_VERSION}} -n observability -f {{.VALUES}}/tempo.yaml
+      - helm upgrade --install otel-collector open-telemetry/opentelemetry-collector --version {{.OTEL_VERSION}} -n observability -f {{.VALUES}}/otel-collector.yaml
+      # The PrometheusRule goes through the operator's admission webhook: wait for the operator
+      # (a small image, about a minute), not for the whole stack.
+      - kubectl -n monitoring rollout status deploy/kube-prometheus-stack-operator --timeout=10m
       - kubectl apply -f deploy/k8s/platform/generated/
       - kubectl apply -f deploy/k8s/platform/gateway.yaml
+
+  platform:wait:
+    desc: Wait until every platform component is Ready (Traefik, Prometheus, Grafana, Loki, Tempo, collector)
+    cmds:
+      - kubectl -n kube-system wait --for=condition=complete job/helm-install-traefik --timeout=10m
+      - kubectl -n kube-system rollout status deploy/traefik --timeout=5m
+      - kubectl -n observability rollout status deploy/otel-collector --timeout=10m
+      - kubectl -n observability rollout status statefulset/tempo --timeout=10m
+      - kubectl -n observability rollout status statefulset/loki --timeout=10m
+      # The Prometheus StatefulSet is created by the operator, a moment after the release.
+      - kubectl -n monitoring wait --for=create statefulset/prometheus-kube-prometheus-stack-prometheus --timeout=5m
+      - kubectl -n monitoring rollout status statefulset/prometheus-kube-prometheus-stack-prometheus --timeout=15m
+      - kubectl -n monitoring rollout status deploy/kube-prometheus-stack-grafana --timeout=20m
 
   grafana:secret:
     internal: true
@@ -236,16 +254,21 @@ tasks:
       - task: app:build
       - task: db:secret
       - kubectl apply -k {{.APP_DIR}}/overlays/_build       # database + CronJob the ingest needs
-      - kubectl -n obslab rollout status statefulset/postgres --timeout=5m
+      # Generous: its image is pulled while the nodes are still pulling the platform images.
+      - kubectl -n obslab rollout status statefulset/postgres --timeout=15m
       - task: app:ingest
       - task: app:deploy
 
   up:
-    desc: Whole lab from zero (cluster, platform, app, index), ~15 min the first time
+    desc: Whole lab from zero (cluster, platform, app, index)
     cmds:
+      # One thing at a time for the Docker engine: building the image while k3d creates its
+      # nodes makes node creation time out on a small machine. The platform, on the other
+      # hand, starts inside the cluster while the image is built.
       - task: cluster:up
-      - task: platform:up
+      - task: platform:up        # submitted, not awaited
       - task: app
+      - task: platform:wait
 
   ask:
     desc: 'Ask the deployed RAG one question (Q="How do taints and tolerations work?")'
