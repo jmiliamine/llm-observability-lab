@@ -36,7 +36,7 @@ nothing; the saved state is a few turns of text with one checkpoint per question
 limit and the purge work; the conversation role cannot read the index and the index role
 cannot read the conversations.
 
-**Compose end to end** (`e2e/test_stack.py`). Starts Prometheus, Tempo, Loki, Grafana, the
+**Compose end to end** (`e2e/test_stack.py`). Starts Prometheus, Tempo, Loki, the
 OpenTelemetry Collector and PostgreSQL with Docker Compose, indexes the sample notes, then asks
 one question and follows it:
 
