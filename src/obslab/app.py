@@ -45,6 +45,11 @@ class Components:
                 return {"ready": False, "store": kind, "chunks": 0,
                         "error": f"vector database unreachable ({type(e).__name__})"}
             error = check_index_meta(self.settings, meta) if meta else EMPTY_INDEX
+            if error is None and isinstance(self.conversations, memory.ConversationStore):
+                try:                # a no-op once the tables exist
+                    self.conversations.ensure_tables()
+                except Exception as e:
+                    error = f"conversation store unreachable ({type(e).__name__})"
         else:                       # the in-memory double the tests pass in
             chunks = len(store.store)
             error = None if chunks else EMPTY_INDEX

@@ -52,6 +52,14 @@ def test_a_follow_up_is_answered_thanks_to_the_previous_turn(components, otel):
     assert nodes[0] == "rag.node condense"
 
 
+def test_the_subject_survives_more_follow_ups_than_the_history_window(settings, otel, store):
+    c = build_components(dataclasses.replace(settings, history_turns=2), otel[0], store=store)
+    cid = c.ask(FIRST)["conversation_id"]
+    for turn in range(2, 7):                    # the first question left the window long ago
+        r = c.ask(FOLLOW_UP, cid)
+        assert r["turn"] == turn and r["route"] == "answered" and r["sources"] == ["etcd.md"], r
+
+
 def test_conversations_do_not_see_each_other(components):
     first = components.ask(FIRST)
     other = components.ask("What does a readiness probe do?")
@@ -74,7 +82,7 @@ def test_the_saved_state_is_a_few_turns_of_text(settings, otel, store):
     saved = c.graph.get_state(thread(cid)).values
     assert saved["turn"] == 4
     assert [m.type for m in saved["messages"]] == ["human", "ai", "human", "ai"]      # the last 2 turns
-    assert saved["messages"][-2].content == FOLLOW_UP
+    assert FOLLOW_UP in saved["messages"][-2].content            # kept as it was understood
     assert saved["hits"] == [] and saved["relevant"] == []       # no retrieved chunk in a checkpoint
     assert len(list(c.graph.get_state_history(thread(cid)))) == 4    # one checkpoint per turn, not per node
 

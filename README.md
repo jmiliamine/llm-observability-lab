@@ -196,6 +196,8 @@ docs/            architecture and troubleshooting
 ## Limits
 
 - One PostgreSQL instance, no replication and no scheduled backups. Fine for a lab.
+- Questions and answers are kept in PostgreSQL for the conversation history, 7 days by default
+  (`OBSLAB_CONVERSATION_TTL_DAYS`).
 - Local use only. The UIs have no TLS, and anonymous access in the Compose stack is read-only.
 - A 3B model answers like a 3B model. The point is the telemetry around it, not the answers.
 

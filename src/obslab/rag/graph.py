@@ -142,7 +142,11 @@ class RagApp:
         old = state.get("messages", [])
         keep = max(window - 1, 0) * 2
         drop = old[:len(old) - keep] if keep else old
-        new = [HumanMessage(content=state["question"]), AIMessage(content=answer)] if window else []
+        # The question is kept as it was understood ("Why does a burn rate alert use two windows?",
+        # not "Why does it use two windows?"): the subject stays in the history even when the turn
+        # that introduced it has left the window.
+        asked = state.get("standalone") or state["question"]
+        new = [HumanMessage(content=asked), AIMessage(content=answer)] if window else []
         return [*(RemoveMessage(id=m.id) for m in drop), *new]
 
     # ── nodes ────────────────────────────────────────────────────────────────

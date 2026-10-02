@@ -99,7 +99,10 @@ class FakeChat(BaseChatModel):
             words = set(re.findall(r"[a-z']+", follow_up.lower()))
             dependent = len(words) < 5 or words & {"it", "its", "they", "them", "their", "that", "this",
                                                     "those", "these", "about", "also", "same"}
-            return f"{follow_up} {asked[-1]}" if dependent and asked else follow_up
+            if not (dependent and asked):
+                return follow_up
+            subject = asked[-1].replace(follow_up, "").strip()      # the same follow-up asked twice
+            return f"{follow_up} {subject}".strip()
         if "Rewrite" in prompt:
             q = prompt.rsplit("Question:", 1)[-1].strip()
             return f"{q} definition explanation"

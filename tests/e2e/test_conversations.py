@@ -179,6 +179,15 @@ def test_two_replicas_starting_together_create_the_tables_once(replica):
     assert not errors, errors
 
 
+def test_not_ready_when_the_conversation_store_cannot_be_reached(replica, monkeypatch):
+    assert replica().status()["ready"] is True
+    monkeypatch.setenv("OBSLAB_CHAT_PASSWORD", "not-the-password")
+    status = replica().status()                # e.g. a database volume that predates conversations
+    assert status["ready"] is False
+    assert status["error"].startswith("conversation store unreachable (")
+    assert "not-the-password" not in str(status)
+
+
 def test_the_two_roles_cannot_see_each_other_s_data(replica, chat_db):
     import psycopg
     replica().ask(FIRST)                                          # makes sure the chat tables exist

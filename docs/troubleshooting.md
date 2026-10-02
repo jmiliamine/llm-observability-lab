@@ -64,7 +64,8 @@ when the nodes have no such mount: the cluster predates the data lake or was cre
 Recreate it with `task cluster:down` and `task up DATALAKE=...`. When the job runs but finds no
 notes, the folder is empty or holds no `.md` or `.txt` file; the previous index keeps serving.
 
-**`/ask` returns 502 and the API logs "password authentication failed for user obslab_chat".**
+**`/readyz` reports "conversation store unreachable", or the API logs "password authentication
+failed for user obslab_chat".**
 The database volume was initialised before conversations existed, so the `obslab_chat` role and
 the `chat` schema are missing (the init script only runs on an empty volume). With Compose:
 `docker compose -f deploy/compose/docker-compose.yml down -v`, then `task stack:up` and
