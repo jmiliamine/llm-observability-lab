@@ -17,7 +17,7 @@ output instead of guessing.
    not the infrastructure. `task test:pgvector` then checks the vector store against a real
    PostgreSQL, and `task test:compose` the whole telemetry path with Docker Compose (Docker only).
 4. **Ask the user before creating the cluster.** `task up` uses about 4 GB of RAM and
-   15 minutes, and binds the ports above. Use `task up OVERLAY=fake` when Ollama is not
+   15 to 20 minutes, and binds the ports above. Use `task up OVERLAY=fake` when Ollama is not
    installed or the models are not pulled (`task doctor` says so).
 5. `task test:k8s`, then `task load` to feed the dashboards. Grafana:
    http://grafana.localhost:8080, password from `task grafana:password`. Never print the

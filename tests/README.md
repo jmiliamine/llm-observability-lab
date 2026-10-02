@@ -8,7 +8,7 @@ Task command, and each one needs a bit more than the previous.
 | Unit and integration | `task test` | nothing (fake models, in-memory exporters, no network) | every push |
 | Vector store | `task test:pgvector` | Docker | every push |
 | Compose end to end | `task test:compose` | Docker | every push |
-| Cluster end to end | `task test:k8s`, `task test:stack` | the k3d cluster (`task up`) | not yet |
+| Cluster end to end | `task test:k8s`, `task test:stack` | the k3d cluster (`task up`) | on main, weekly, and on pull requests labelled `cluster-e2e` |
 | Real models | `task test:ollama` | Ollama with both models pulled | no |
 
 ## What each level checks

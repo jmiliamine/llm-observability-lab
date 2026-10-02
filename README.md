@@ -96,7 +96,7 @@ task setup
 task up
 ```
 
-`task up` takes about 15 minutes the first time: it creates the cluster, installs the
+`task up` takes 15 to 20 minutes the first time, most of it image downloads: it creates the cluster, installs the
 platform, builds the image, starts PostgreSQL, indexes the notes of the data lake (`datalake/`)
 into it and deploys the API.
 No GPU or no Ollama? Use `task up OVERLAY=fake` instead. Everything is the same except the

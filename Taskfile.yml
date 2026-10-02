@@ -232,15 +232,6 @@ tasks:
       TAG:
         sh: git rev-parse --short HEAD 2>/dev/null || {{.PY}} -c "import time; print(time.strftime('%Y%m%d-%H%M%S'))"
 
-  app:image:
-    internal: true
-    desc: Build the image without pushing it (needs no cluster, so `task up` does it while the cluster is created)
-    cmds:
-      - docker build -q --build-arg VCS_REF={{.TAG}} -t {{.REGISTRY_PUSH}}/{{.IMAGE}}:{{.TAG}} .
-    vars:
-      TAG:
-        sh: git rev-parse --short HEAD 2>/dev/null || {{.PY}} -c "import time; print(time.strftime('%Y%m%d-%H%M%S'))"
-
   app:deploy:
     desc: Apply the last built overlay and wait for the rollout
     cmds:
@@ -263,21 +254,21 @@ tasks:
       - task: app:build
       - task: db:secret
       - kubectl apply -k {{.APP_DIR}}/overlays/_build       # database + CronJob the ingest needs
-      - kubectl -n obslab rollout status statefulset/postgres --timeout=5m
+      # Generous: its image is pulled while the nodes are still pulling the platform images.
+      - kubectl -n obslab rollout status statefulset/postgres --timeout=15m
       - task: app:ingest
       - task: app:deploy
 
   up:
     desc: Whole lab from zero (cluster, platform, app, index)
     cmds:
-      - task: up:start
-      - task: platform:up        # submitted, not awaited: the platform starts while the app is deployed
-      - task: app                # its image build is a cache hit: up:start already built it
+      # One thing at a time for the Docker engine: building the image while k3d creates its
+      # nodes makes node creation time out on a small machine. The platform, on the other
+      # hand, starts inside the cluster while the image is built.
+      - task: cluster:up
+      - task: platform:up        # submitted, not awaited
+      - task: app
       - task: platform:wait
-
-  up:start:
-    internal: true
-    deps: [cluster:up, app:image]      # in parallel: neither needs the other
 
   ask:
     desc: 'Ask the deployed RAG one question (Q="How do taints and tolerations work?")'
