@@ -59,7 +59,7 @@ More detail, including what each namespace owns and how a request is traced, in
 
 ## Quick start
 
-Tested on Windows with Docker Desktop. Linux and macOS should work (every command
+Tested on Windows with Docker Desktop (WSL2 backend). Linux and macOS should work (every command
 goes through [Task](https://taskfile.dev)), but have not been tested yet.
 
 You need Docker Desktop with about **10 GB of memory** for its VM, and these tools:
@@ -149,7 +149,8 @@ machine, since the models run locally too.
 
 ## Tests
 
-The first three run in CI on every push. Details in [tests/README.md](tests/README.md).
+The first three run in CI on every push, the cluster level on `main` and every week. Details in
+[tests/README.md](tests/README.md).
 
 | Command | What it proves | Needs |
 |---|---|---|

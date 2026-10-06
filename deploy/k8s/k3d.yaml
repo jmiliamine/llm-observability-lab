@@ -25,12 +25,14 @@ image: rancher/k3s:v1.36.4-k3s1
 ports:
   # Host 8080 -> k3d load balancer :80 -> Traefik Gateway (HTTP). All UIs are reached as
   # http://<name>.localhost:8080 (browsers resolve *.localhost to 127.0.0.1).
-  - port: 8080:80
+  # Bound to 127.0.0.1 like every published port of the lab: without a host address Docker
+  # listens on all interfaces, and the API and the UIs would be reachable from the local network.
+  - port: 127.0.0.1:8080:80
     nodeFilters: [loadbalancer]
   # Host 4318 -> NodePort 30318 -> OTel Collector (OTLP/HTTP). Same address as the compose stack,
   # so the app running on Windows (dev loop) and the `stack` tests need no config change.
   # (Not through the Gateway: Windows does not resolve *.localhost outside browsers.)
-  - port: 4318:30318
+  - port: 127.0.0.1:4318:30318
     nodeFilters: [loadbalancer]
 volumes:
   # The data lake: the host folder of notes, read-only in every node, so the ingest Job can run

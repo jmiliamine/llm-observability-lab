@@ -1,8 +1,9 @@
 # Security
 
 This lab is meant to run on a local machine. The UIs are served over plain HTTP on
-`*.localhost`, and the Compose stack gives anonymous read-only access to Grafana. Do not expose
-it on a network as is.
+`*.localhost`, and the API has no authentication. Every port the cluster and the Compose stack
+publish is bound to 127.0.0.1, so nothing is reachable from the network. Do not change that
+binding to expose the lab as is.
 
 What it does take care of:
 
@@ -16,8 +17,8 @@ What it does take care of:
 - The Compose stack uses fixed local-only database passwords on a port bound to 127.0.0.1;
   set `OBSLAB_*_PASSWORD` in a `.env` file to change them.
 - Prompts and answers are not recorded in telemetry unless `OBSLAB_CAPTURE_CONTENT=true`.
-- Your notes stay on your machine: they are copied into a local image and a local database,
-  and the models run locally.
+- Your notes stay on your machine: they are read from a local folder, indexed into a local
+  database, and the models run locally.
 
 ## What is checked automatically
 
@@ -37,5 +38,6 @@ Dependabot proposes the updates. CI also runs weekly, so a new CVE shows up with
 
 ## Reporting a vulnerability
 
-Please do not open a public issue. Send an e-mail to 93337867+jmiliamine@users.noreply.github.com with the details
-and the steps to reproduce. I will answer within a week.
+Please do not open a public issue. Use **Report a vulnerability** in the Security tab of the
+repository (GitHub private vulnerability reporting), with the details and the steps to
+reproduce. I will answer within a week.
