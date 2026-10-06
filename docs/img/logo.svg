@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="llm-observability-lab logo: a telescope looking at a graph of connected nodes">
-  <title>llm-observability-lab</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="rag-observability-k8s-lab logo: a telescope looking at a graph of connected nodes">
+  <title>rag-observability-k8s-lab</title>
   <!-- A telescope (observability) whose line of sight ends in a small graph of nodes (the RAG graph). -->
   <g transform="rotate(-38 104 156)">
     <!-- eyepiece -->

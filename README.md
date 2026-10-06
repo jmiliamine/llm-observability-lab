@@ -1,6 +1,6 @@
-# <img src="docs/img/logo.svg" width="44" align="top" alt=""> llm-observability-lab
+# <img src="docs/img/logo.svg" width="44" align="top" alt=""> rag-observability-k8s-lab
 
-[![CI](https://github.com/jmiliamine/llm-observability-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/jmiliamine/llm-observability-lab/actions/workflows/ci.yml)
+[![CI](https://github.com/jmiliamine/rag-observability-k8s-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/jmiliamine/rag-observability-k8s-lab/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-3776ab?logo=python&logoColor=white)](pyproject.toml)
 [![OpenTelemetry GenAI conventions](https://img.shields.io/badge/OpenTelemetry-GenAI%20conventions-f5a800?logo=opentelemetry&logoColor=white)](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
