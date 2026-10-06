@@ -54,7 +54,11 @@ WORD = re.compile(r"[a-z0-9]+")
 MACHINE_PATHS = [r"[A-Za-z]:\\Users\\", r"/home/[a-z]+/", r"/Users/[a-z]+/"]
 # The author's identity is expected in these files only.
 IDENTITY = [r"\bamine\b", r"\bjmili\b"]
-IDENTITY_OK = {"LICENSE", "pyproject.toml", ".github/SECURITY.md", "README.md"}
+IDENTITY_OK = {"LICENSE", "pyproject.toml", "README.md"}
+# A mailbox in a public repository is harvested within days: the only real address allowed is
+# GitHub's no-reply one. Reserved domains (RFC 2606, RFC 6762) are fine in examples and tests.
+MAIL = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})")
+MAIL_OK = re.compile(r"(^|\.)(users\.noreply\.github\.com|example\.(com|org|net)|internal|local|localhost|test|invalid)$")
 
 # The docs describe the system as it is; its development history is not part of them.
 HISTORY_PHRASES = [r"lessons? learned", r"the hard way", r"things that broke", r"\bwe learned\b",
@@ -112,6 +116,14 @@ def test_no_machine_paths_and_identity_only_where_expected():
         for marker in markers:
             for m in re.finditer(marker, text, flags=re.IGNORECASE):
                 hits.append(f"{rel}:{text.count(chr(10), 0, m.start()) + 1}: {m.group(0)!r}")
+    assert not hits, "\n".join(hits)
+
+
+def test_no_personal_mail_address():
+    hits = []
+    for f in published_files():
+        rel, text = f.relative_to(ROOT).as_posix(), _text(f)
+        hits += [f"{rel}: {m.group(0)}" for m in MAIL.finditer(text) if not MAIL_OK.search(m.group(1).lower())]
     assert not hits, "\n".join(hits)
 
 
