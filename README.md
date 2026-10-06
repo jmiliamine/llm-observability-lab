@@ -14,7 +14,7 @@ Everything runs in a two-node k3d cluster set up like a small company platform: 
 pinned Helm charts, restricted pods, SLO alerts.
 
 The design is explained step by step in an article:
-[Private LangGraph RAG on Kubernetes with Full Observability](https://medium.com/@jmili.amine/private-langgraph-rag-on-kubernetes-with-full-observability-fc3176d87292).
+[Private LangGraph RAG on Kubernetes with Full Observability](https://medium.com/@jmiliamine/private-langgraph-rag-on-kubernetes-with-full-observability-fc3176d87292).
 
 One question, followed from the terminal to its trace:
 
