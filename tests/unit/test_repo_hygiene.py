@@ -146,3 +146,16 @@ def test_text_files_use_lf():
     hits = [f.relative_to(ROOT).as_posix() for f in published_files()
             if f.suffix.lower() != ".ps1" and b"\r\n" in f.read_bytes()]
     assert not hits, f"CRLF line endings (see .gitattributes): {hits}"
+
+
+def test_published_ports_are_bound_to_localhost():
+    """Nothing in the lab has authentication worth exposing: every port published on the host must
+    name 127.0.0.1, or Docker listens on all interfaces."""
+    k3d = (ROOT / "deploy/k8s/k3d.yaml").read_text(encoding="utf-8")
+    ports = re.findall(r"^\s*- port:\s*(\S+)", k3d, flags=re.MULTILINE)
+    assert ports and all(p.startswith("127.0.0.1:") for p in ports), ports
+    assert re.search(r'host:\s*"127\.0\.0\.1"', k3d), "registry host"
+
+    compose = (ROOT / "deploy/compose/docker-compose.yml").read_text(encoding="utf-8")
+    mappings = re.findall(r'"((?:[\d.]+:)?\d+:\d+)"', compose)
+    assert mappings and all(m.startswith("127.0.0.1:") for m in mappings), mappings

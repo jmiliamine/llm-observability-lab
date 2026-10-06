@@ -209,6 +209,11 @@ accepts.
 restricted Pod Security Standard: non-root, read-only root filesystem, no capabilities. Memory
 limits but no CPU limits, since throttling hurts latency more than it protects.
 
+**Published ports on 127.0.0.1 only.** The API has no authentication and the UIs are plain
+HTTP, which is fine on one machine and not on a shared network. Docker publishes a port on
+every interface unless it is given a host address, so the cluster load balancer, the registry
+and the Compose stack all name 127.0.0.1. A unit test fails if a published port does not.
+
 **Readiness without Ollama.** `/readyz` checks what the app owns: its graph and its index. It
 does not call Ollama, because a shared dependency being down would empty the Service on every
 replica at once; that case shows up as errors and alerts instead.
