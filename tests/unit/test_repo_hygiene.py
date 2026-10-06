@@ -58,7 +58,7 @@ IDENTITY_OK = {"LICENSE", "pyproject.toml", "README.md"}
 # A mailbox in a public repository is harvested within days: the only real address allowed is
 # GitHub's no-reply one. Reserved domains (RFC 2606, RFC 6762) are fine in examples and tests.
 MAIL = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})")
-MAIL_OK = re.compile(r"(^|\.)(users\.noreply\.github\.com|example\.(com|org|net)|internal|local|localhost|test|invalid)$")
+MAIL_OK = re.compile(r"(^|\.)(users\.noreply\.github\.com|example\.(com|org|net)|internal|local|localhost|test)$")
 
 # The docs describe the system as it is; its development history is not part of them.
 HISTORY_PHRASES = [r"lessons? learned", r"the hard way", r"things that broke", r"\bwe learned\b",
