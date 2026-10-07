@@ -1,0 +1,104 @@
+# The end-to-end tests with the real models, after every merge on main.
+#
+# Every job of ci.yml uses the fake provider. This workflow asks the same questions to
+# `llama3.2:3b` and `nomic-embed-text`, on the CPU of a hosted runner: slower, and not the same
+# answer twice. So it never runs on a pull request and is not a required check: it tells whether
+# the current `main` works end to end, it does not gate a merge.
+#
+# Same rules as ci.yml: actions pinned to a commit SHA, no secret, read-only permissions, the
+# Task commands of a developer machine. Ollama runs from its image, pinned by digest. The model
+# tags are not pinned (Ollama has no digest syntax for a pull); `ollama list` prints their IDs
+# in the log of each run.
+name: Real model
+
+on:
+  push:
+    branches: [main, real-model-after-merge]   # TRIAL: remove the branch before merge
+  schedule:
+    - cron: "43 5 * * 1"      # Mondays, after the weekly CI run: a new runner image shows up here too
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: real-model-${{ github.ref }}
+  cancel-in-progress: false   # every state of main gets its verdict
+
+env:
+  UV_LOCKED: "1"
+  UV_VERSION: "0.12.21"
+  TASK_VERSION: "3.53.1"
+  OLLAMA_IMAGE: ollama/ollama:0.40.0@sha256:1bef639749741b375e9a1eb2c1346fb57ce52f5432de1f74846e44ccc18e1687
+  CHAT_MODEL: llama3.2:3b
+  EMBED_MODEL: nomic-embed-text
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  real-model:
+    name: end to end with the real models (CPU)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7   # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          save-cache: false        # the test job of ci.yml saves the same uv cache
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e   # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+          repo-token: ${{ github.token }}
+      - name: Model files (cache)
+        # About 2.3 GB for the two models. The key only changes with the model names, so a run
+        # after the first one restores them instead of downloading them.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6.1.0
+        with:
+          path: ~/ollama-models
+          key: ollama-models-${{ env.CHAT_MODEL }}-${{ env.EMBED_MODEL }}
+      - name: Start Ollama
+        run: |
+          mkdir -p "$HOME/ollama-models"
+          docker run -d --name ollama -p 127.0.0.1:11434:11434 \
+            -v "$HOME/ollama-models:/root/.ollama/models" "$OLLAMA_IMAGE"
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:11434/api/version && break
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:11434/api/version > /dev/null
+      - name: Pull the models
+        run: |
+          docker exec ollama ollama pull "$CHAT_MODEL"
+          docker exec ollama ollama pull "$EMBED_MODEL"
+          docker exec ollama ollama list
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/ollama-models"    # written by root in the container; the cache step reads it
+          df -h /
+      - name: Model speed on this runner
+        # Loads the model and reports its speed, so a slow run can be told from a broken one.
+        run: |
+          {
+            echo "### Model speed on this runner"
+            echo '```'
+            nproc | sed 's/^/cpus: /'
+            free -g | awk '/^Mem:/ {print "memory: " $2 " GB"}'
+            docker exec ollama ollama run "$CHAT_MODEL" --verbose "Answer with one word: ready" 2>&1 \
+              | grep -E "^(load duration|prompt eval rate|eval count|eval rate|total duration)"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - run: task setup
+      # The Compose backends, the sample notes indexed with the real embedding model, then one
+      # question and its follow-up: answer, metrics, trace and logs.
+      - run: task test:compose PROVIDER=ollama
+      - run: task test:ollama      # the four behaviours a fake model cannot show
+      - name: Logs (on failure)
+        if: failure()
+        run: |
+          docker logs --tail 80 ollama || true
+          docker compose -f deploy/compose/docker-compose.yml logs --no-color --tail 80 || true
+          df -h / || true
