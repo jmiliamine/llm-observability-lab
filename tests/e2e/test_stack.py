@@ -108,6 +108,12 @@ def test_metrics_reach_prometheus(asked):
     assert res and float(res[0]["value"][1]) >= 1, f"no chat metric for service.instance.id={RUN_ID}"
 
 
+def test_admission_wait_reaches_prometheus(asked):
+    q = urllib.parse.quote(f'sum(rag_admission_wait_seconds_count{{instance="{RUN_ID}"}})')
+    res = _poll(lambda: request(f"{PROM}/api/v1/query?query={q}")["data"]["result"])
+    assert res and float(res[0]["value"][1]) >= 1, "no admission wait recorded for the model calls of this run"
+
+
 def test_trace_reaches_tempo(asked):
     _, trace_id = asked
 
@@ -121,6 +127,7 @@ def test_trace_reaches_tempo(asked):
     assert text is not None, f"complete trace {trace_id} not found in Tempo"
     assert asked[0]["conversation_id"] in text, "gen_ai.conversation.id is missing from the workflow span"
     assert "rag.node condense" in text
+    assert "rag.admission.wait_s" in text, "the wait for a model slot is missing from the node spans"
     if STORE == "pgvector":
         assert "SELECT rag.chunks" in text, "the vector query span is missing from the trace"
 

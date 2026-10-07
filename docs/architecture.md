@@ -112,7 +112,7 @@ What protects the index:
 | Signal | Examples | Where |
 |---|---|---|
 | GenAI metrics | `gen_ai.client.operation.duration`, `gen_ai.client.inference.usage.{input,output}_tokens`, time to first chunk | Prometheus |
-| RAG metrics | retrieval top score, relevant documents, rewrites, fallbacks, groundedness, node duration, node retries | Prometheus |
+| RAG metrics | retrieval top score, relevant documents, rewrites, fallbacks, groundedness, node duration, node retries, admission wait, waiting line, dropped requests | Prometheus |
 | HTTP metrics | `http.server.request.duration` (stable semantic conventions) | Prometheus |
 | Traces | one tree per question, GenAI attributes on each model call, a database span per vector query | Tempo |
 | Logs | one record per answer with route, rewrites and groundedness, plus the trace ID | Loki |
@@ -224,6 +224,18 @@ limits but no CPU limits, since throttling hurts latency more than it protects.
 HTTP, which is fine on one machine and not on a shared network. Docker publishes a port on
 every interface unless it is given a host address, so the cluster load balancer, the registry
 and the Compose stack all name 127.0.0.1. A unit test fails if a published port does not.
+
+**A bounded line in front of the model.** Two API replicas accept more questions than one local
+model can answer in time, and the readiness probe says nothing about that backlog. Without a
+bound the surplus queues inside the model server, unmeasured, and a question whose caller gave
+up still gets answered. So each replica lets `OBSLAB_MODEL_CONCURRENCY` model calls run and
+`OBSLAB_MODEL_QUEUE` wait; one more is refused at once with a 503 and `Retry-After`. A question
+has `OBSLAB_REQUEST_DEADLINE_S` in total: still waiting at that point it is dropped before the
+model is asked, and an answer still being written is cut by closing the stream (504). The wait
+is its own number, on the node span (`rag.admission.wait_s`) and in `rag.admission.wait`, next
+to the model's execution time. Sizing rule: queue x typical answer time < deadline < the
+caller's timeout. The bound is per replica, not global: two replicas admit twice as much. The
+probes are unchanged, since a busy model is not an unready pod.
 
 **Readiness without Ollama.** `/readyz` checks what the app owns: its graph and its index. It
 does not call Ollama, because a shared dependency being down would empty the Service on every

@@ -77,8 +77,15 @@ def test_metrics_labelled_with_kubernetes_metadata(answer):
         res = request(f"{PROM}/api/v1/query?query={q}")["data"]["result"]
         return [r["metric"] for r in res if not any(c in r["metric"] for c in churn)]
 
-    series = _poll(clean_series)       # metric export ~10 s + scrape 15 s
-    assert series, "no obslab workflow series without uid/start-time labels"
+    # Metric export ~10 s + scrape 15 s, once Prometheus scrapes the collector at all: on a cluster
+    # created a few minutes ago, the operator may still be loading that scrape target.
+    series = _poll(clean_series, timeout=300)
+    if not series:                     # say what Prometheus has instead: the labels tell which part failed
+        any_ns = urllib.parse.quote("gen_ai_invoke_workflow_duration_seconds_count")
+        found = [r["metric"] for r in request(f"{PROM}/api/v1/query?query={any_ns}")["data"]["result"]]
+        up = request(f"{PROM}/api/v1/query?query=" + urllib.parse.quote('up{job=~".*otel.*"}'))["data"]["result"]
+        pytest.fail(f"no obslab workflow series without uid/start-time labels; workflow series found: {found}; "
+                    f"collector scrape targets: {[(r['metric'].get('endpoint'), r['value'][1]) for r in up]}")
     labels = series[0]
     assert labels.get("k8s_deployment_name") == "obslab-api"
     assert labels.get("k8s_pod_name", "").startswith("obslab-api-")   # per-replica identity kept
