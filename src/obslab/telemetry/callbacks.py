@@ -11,6 +11,9 @@ Span tree produced for one question:
   │   └── chat llama3.2:3b             (this handler, CLIENT, tokens + TTFC)
   └── rag.node grade
 
+A node retried by a LangGraph RetryPolicy runs again inside the same step: each attempt gets its
+own `rag.node` span, numbered by `langgraph.attempt`, and the failed ones carry the error.
+
 LangChain emits many internal runnables (sequences, channel writes); they get
 no span of their own and are mapped to their nearest instrumented ancestor.
 """
@@ -52,6 +55,7 @@ class OTelCallbackHandler(BaseCallbackHandler):
         self.workflow_name = workflow_name
         self._runs: dict[UUID, _Run] = {}
         self._alias: dict[UUID, UUID | None] = {}   # uninstrumented run -> instrumented ancestor
+        self._attempts: dict[tuple[UUID, str, int], int] = {}   # (graph run, node, step) -> executions
         self._lock = threading.Lock()
 
     # ── helpers ──────────────────────────────────────────────────────────────
@@ -81,7 +85,11 @@ class OTelCallbackHandler(BaseCallbackHandler):
     def _pop(self, run_id: UUID) -> _Run | None:
         with self._lock:
             self._alias.pop(run_id, None)
-            return self._runs.pop(run_id, None)
+            run = self._runs.pop(run_id, None)
+            if run is not None and run.kind == "workflow":     # the graph run is over: forget its attempts
+                for key in [k for k in self._attempts if k[0] == run_id]:
+                    del self._attempts[key]
+            return run
 
     @staticmethod
     def _fail(run: _Run, error: BaseException) -> str:
@@ -101,8 +109,16 @@ class OTelCallbackHandler(BaseCallbackHandler):
                 attrs["gen_ai.conversation.id"] = str(metadata["thread_id"])
             self._start(run_id, None, f"invoke_workflow {self.workflow_name}", SpanKind.INTERNAL, attrs, "workflow")
         elif metadata.get("langgraph_node") == name and not name.startswith("__"):
+            # A retry policy runs the node again in the same step (a loop in the graph is a new
+            # step): count the executions so that each attempt can be told apart in the trace.
+            step = int(metadata.get("langgraph_step", 0))
+            with self._lock:
+                attempt = self._attempts[parent_run_id, name, step] = self._attempts.get(
+                    (parent_run_id, name, step), 0) + 1
+            if attempt > 1:
+                self.rag.node_retries.add(1, {"langgraph.node": name})
             self._start(run_id, parent_run_id, f"rag.node {name}", SpanKind.INTERNAL,
-                        {"langgraph.node": name, "langgraph.step": int(metadata.get("langgraph_step", 0))}, "node")
+                        {"langgraph.node": name, "langgraph.step": step, "langgraph.attempt": attempt}, "node")
         else:
             with self._lock:
                 self._alias[run_id] = parent_run_id

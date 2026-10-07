@@ -95,3 +95,6 @@ class RagMetrics:
         self.node_duration = meter.create_histogram(
             "rag.graph.node.duration", unit="s", description="Duration of each LangGraph node.",
             explicit_bucket_boundaries_advisory=DURATION_BUCKETS)
+        self.node_retries = meter.create_counter(
+            "rag.graph.node.retries", unit="{attempt}",
+            description="Node executions repeated by a retry policy (attempts after the first).")

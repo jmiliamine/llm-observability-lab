@@ -112,13 +112,24 @@ What protects the index:
 | Signal | Examples | Where |
 |---|---|---|
 | GenAI metrics | `gen_ai.client.operation.duration`, `gen_ai.client.inference.usage.{input,output}_tokens`, time to first chunk | Prometheus |
-| RAG metrics | retrieval top score, relevant documents, rewrites, fallbacks, groundedness | Prometheus |
+| RAG metrics | retrieval top score, relevant documents, rewrites, fallbacks, groundedness, node duration, node retries | Prometheus |
 | HTTP metrics | `http.server.request.duration` (stable semantic conventions) | Prometheus |
 | Traces | one tree per question, GenAI attributes on each model call, a database span per vector query | Tempo |
 | Logs | one record per answer with route, rewrites and groundedness, plus the trace ID | Loki |
 
 Metric labels are bounded (operation, model, node, reason, error type). Prompts and answers
 only appear on spans when `OBSLAB_CAPTURE_CONTENT=true`.
+
+Two kinds of retry exist in a LangGraph workflow, and both are observable here:
+
+| Retry | What happens | In a trace | In metrics |
+|---|---|---|---|
+| A loop in the graph (`rewrite`, then `retrieve` again) | the node runs again in a new step | a second `rag.node retrieve` span, `langgraph.attempt` 1 | `rag.query.rewrites` |
+| A `RetryPolicy` on a node | the node runs again inside the same step | one `rag.node` span per attempt, numbered by `langgraph.attempt`; failed attempts carry the error | `rag.graph.node.retries` |
+
+The node spans come from the LangChain callbacks, which fire for every attempt. LangGraph's task
+stream reports the start and the final result of a retried node only, so it cannot be used to see
+the attempts. No node of the lab uses a `RetryPolicy` today; a unit test covers the case.
 
 ## Deployment options
 
