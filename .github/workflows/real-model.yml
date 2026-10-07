@@ -102,3 +102,10 @@ jobs:
           docker logs --tail 80 ollama || true
           docker compose -f deploy/compose/docker-compose.yml logs --no-color --tail 80 || true
           df -h / || true
+      - name: TRIAL repeat the real-model suite
+        if: always()
+        run: |
+          for i in $(seq 1 12); do
+            echo "== round $i"
+            .venv/bin/python -m pytest -m ollama -q -rf 2>&1 | grep -E "^FAILED|passed|failed|AssertionError: " | cut -c1-300 || true
+          done
