@@ -130,6 +130,20 @@ ts("Condense step duration (p50 / p95)", [
    desc="Near zero on a first question (no model call); on a follow-up, the time to rewrite it as a standalone question.")
 advance()
 
+row("Model admission (overload)")
+ts("Wait for a model slot (p50 / p95)", [(HQ.format(q=q, by="", m="rag_admission_wait_seconds"), f"p{int(q*100)}")
+                                           for q in (0.5, 0.95)], "s", 0, 8,
+   desc="Time a model call spent waiting for a slot, apart from the model's own execution time. "
+        "Near zero unless more questions arrive than the model can answer.")
+ts("Model calls waiting now", [("sum(rag_admission_waiting)", "waiting")], "short", 8, 8,
+   desc="Length of the waiting line, all replicas together. Bounded by OBSLAB_MODEL_QUEUE per replica.")
+ts("Requests dropped / min, by reason", [
+    ("sum by (rag_admission_reason) (rate(rag_admission_rejections_total[$__rate_interval])) * 60",
+     "{{rag_admission_reason}}")], "short", 16, 8,
+   desc="queue_full: refused at once, the waiting line was full (HTTP 503). "
+        "deadline: dropped after OBSLAB_REQUEST_DEADLINE_S (HTTP 504).")
+advance()
+
 dashboard = {
     "uid": "obslab-rag", "title": "LLM / RAG overview", "tags": ["llm", "rag", "opentelemetry"],
     "timezone": "browser", "schemaVersion": 39, "refresh": "10s",

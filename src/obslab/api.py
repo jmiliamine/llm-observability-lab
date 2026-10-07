@@ -11,6 +11,9 @@
   endpoints -- errors are better surfaced as 502s and alerts than as a silent outage.
 - On shutdown (SIGTERM from Kubernetes) the lifespan hook flushes spans, metrics and
   logs still buffered in the batch processors, so the last requests are not lost.
+- /ask answers 503 when the model's waiting line is full and 504 when the request deadline
+  passes (rag/admission.py). The probes do not look at that line: a busy model is not an
+  unready pod.
 - /ask takes an optional conversation_id (returned by the previous answer). The history
   lives in PostgreSQL, so any replica can serve the next question of a conversation.
 """
@@ -28,6 +31,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pydantic import BaseModel, Field
 
 from .app import Components
+from .rag.admission import DeadlineExceeded, Overloaded
 from .rag.graph import ConversationTooLongError
 
 log = logging.getLogger("obslab.api")
@@ -80,6 +84,14 @@ def create_app(components: Components) -> FastAPI:
             result = components.ask(body.question, str(body.conversation_id) if body.conversation_id else None)
         except ConversationTooLongError as e:
             raise HTTPException(status_code=409, detail=f"{e}: start a new conversation") from e
+        except Overloaded as e:
+            # Refused before any work: the model already has a full waiting line. 503 and not 429,
+            # the limit is the service's capacity, not this client's quota.
+            raise HTTPException(status_code=503, detail="busy: the model queue is full, retry shortly",
+                                headers={"Retry-After": "5"}) from e
+        except DeadlineExceeded as e:
+            raise HTTPException(status_code=504, detail="the request deadline passed before an answer was ready",
+                                headers={"Retry-After": "5"}) from e
         except Exception as e:
             # 502: a dependency (model, vector database) failed. Only the error type goes back to the
             # client; the full message, which can name hosts or users, stays on the trace.

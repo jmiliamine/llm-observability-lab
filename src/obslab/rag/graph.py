@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, TypedDict
 
@@ -38,12 +40,14 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from opentelemetry import context as otel_context
+from opentelemetry import trace
 from opentelemetry.trace import SpanKind
 
 from ..config import Settings
 from ..telemetry.callbacks import OTelCallbackHandler
 from ..telemetry.genai import OP, RagMetrics
 from ..telemetry.setup import Telemetry
+from .admission import REASON, Admission, DeadlineExceeded
 
 log = logging.getLogger("obslab.rag")
 MAX_REWRITES = 1
@@ -130,6 +134,12 @@ class RagApp:
     handler: OTelCallbackHandler
     rag_metrics: RagMetrics
     index_name: str = "notes"
+    admission: Admission | None = None
+
+    def __post_init__(self) -> None:
+        if self.admission is None:
+            self.admission = Admission(self.settings.model_concurrency, self.settings.model_queue,
+                                       self.rag_metrics)
 
     # ── helpers ──────────────────────────────────────────────────────────────
     def _node_ctx(self, config: RunnableConfig):
@@ -149,6 +159,18 @@ class RagApp:
         new = [HumanMessage(content=asked), AIMessage(content=answer)] if window else []
         return [*(RemoveMessage(id=m.id) for m in drop), *new]
 
+    @staticmethod
+    def _deadline(config: RunnableConfig) -> float | None:
+        return ((config or {}).get("configurable") or {}).get("deadline")
+
+    @contextmanager
+    def _model_slot(self, step: str, config: RunnableConfig):
+        """One slot of the admission gate for a model call of this node. The wait is written on
+        the node's span, so a trace shows waiting and model execution as two numbers."""
+        with self.admission.slot(step, self._deadline(config)) as waited:
+            trace.get_current_span(self._node_ctx(config)).set_attribute("rag.admission.wait_s", round(waited, 4))
+            yield waited
+
     # ── nodes ────────────────────────────────────────────────────────────────
     def condense(self, state: RagState, config: RunnableConfig) -> dict[str, Any]:
         turn = state.get("turn", 0) + 1
@@ -159,8 +181,9 @@ class RagApp:
         if not history:                         # first question: nothing to resolve, no model call
             return {"standalone": state["question"]}
         lines = [f"{'User' if m.type == 'human' else 'Assistant'}: {str(m.content)[:ANSWER_CLIP]}" for m in history]
-        msg = self.llm.invoke([HumanMessage(content=CONDENSE.format(
-            history="\n".join(lines), question=state["question"]))], config)
+        with self._model_slot("condense", config):
+            msg = self.llm.invoke([HumanMessage(content=CONDENSE.format(
+                history="\n".join(lines), question=state["question"]))], config)
         return {"standalone": standalone_question(state["question"], str(msg.content))}
 
     def retrieve(self, state: RagState, config: RunnableConfig) -> dict[str, Any]:
@@ -194,9 +217,10 @@ class RagApp:
         return "rewrite" if state.get("rewrites", 0) < MAX_REWRITES else "fallback"
 
     def rewrite(self, state: RagState, config: RunnableConfig) -> dict[str, Any]:
-        msg = self.llm.invoke([HumanMessage(
-            content="Rewrite this question as a short search query with key technical terms.\n"
-                    f"Question: {state.get('standalone') or state['question']}")], config)
+        with self._model_slot("rewrite", config):
+            msg = self.llm.invoke([HumanMessage(
+                content="Rewrite this question as a short search query with key technical terms.\n"
+                        f"Question: {state.get('standalone') or state['question']}")], config)
         self.rag_metrics.rewrites.add(1, {"gen_ai.data_source.id": self.index_name})
         return {"query": str(msg.content).strip()[:300], "rewrites": state.get("rewrites", 0) + 1}
 
@@ -205,8 +229,20 @@ class RagApp:
         messages = [SystemMessage(content=SYSTEM),
                     HumanMessage(content=f"Context:\n{context}\n\n"
                                          f"Question: {state.get('standalone') or state['question']}")]
-        # Streaming on purpose: it is what makes time-to-first-chunk measurable.
-        answer = "".join(str(c.content) for c in self.llm.stream(messages, config)).strip()
+        # Streaming on purpose: it is what makes time-to-first-chunk measurable, and what lets a
+        # generation be cut when the request deadline passes (closing the stream stops the model).
+        deadline, parts = self._deadline(config), []
+        with self._model_slot("generate", config):
+            stream = self.llm.stream(messages, config)
+            try:
+                for chunk in stream:
+                    parts.append(str(chunk.content))
+                    if deadline is not None and time.monotonic() > deadline:
+                        self.rag_metrics.admission_rejections.add(1, {REASON: "deadline"})
+                        raise DeadlineExceeded("the answer was still being written at the request deadline")
+            finally:
+                stream.close()
+        answer = "".join(parts).strip()
         sources = sorted({d.metadata.get("source", "?") for d, _ in state["relevant"]})
         # The turn only counts once it is answered: a failed run leaves the conversation as it was.
         return {"answer": answer, "route": "answered", "sources": sources, "turn": state.get("turn", 0) + 1,
@@ -252,9 +288,11 @@ class RagApp:
         conversation_id = conversation_id or str(uuid.uuid4())
         # One checkpoint per turn, written when the run succeeds (instead of one per node).
         saving = {"durability": "exit"} if graph.checkpointer else {}
+        deadline = time.monotonic() + self.settings.request_deadline_s
         state = graph.invoke(
             {**NEW_TURN, "question": question},
-            config={"callbacks": [self.handler], "configurable": {"thread_id": conversation_id}}, **saving)
+            config={"callbacks": [self.handler],
+                    "configurable": {"thread_id": conversation_id, "deadline": deadline}}, **saving)
         log.info("rag answered", extra={"rag.route": state.get("route"), "rag.rewrites": state.get("rewrites", 0),
                                         "rag.groundedness": state.get("groundedness", 0.0),
                                         "rag.turn": state.get("turn", 1),

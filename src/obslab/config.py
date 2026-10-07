@@ -12,6 +12,9 @@ OBSLAB_CAPTURE_CONTENT   true to record prompts/answers on spans (opt-in, off by
 OBSLAB_HISTORY_TURNS     past turns used to understand a follow-up question, default 3 (0..10)
 OBSLAB_MAX_TURNS         questions allowed in one conversation, default 20
 OBSLAB_CONVERSATION_TTL_DAYS  idle conversations older than this are purged, default 7
+OBSLAB_MODEL_CONCURRENCY model calls running at once in this process, default 1
+OBSLAB_MODEL_QUEUE       model calls allowed to wait behind them, default 8 (more are refused at once)
+OBSLAB_REQUEST_DEADLINE_S  seconds a question may take before it is dropped, default 120
 OBSLAB_TOP_K / OBSLAB_MIN_SCORE   retrieval tuning (validated: 1..20 and 0..1)
 OBSLAB_PRICE_IN / OBSLAB_PRICE_OUT  USD per 1M tokens, to chart an "API-equivalent" cost
 OBSLAB_ENVIRONMENT       deployment.environment.name resource attribute (local, k3d, ...)
@@ -48,6 +51,10 @@ class Settings:
     max_turns: int = field(default_factory=lambda: int(os.environ.get("OBSLAB_MAX_TURNS", "20")))
     conversation_ttl_days: float = field(
         default_factory=lambda: float(os.environ.get("OBSLAB_CONVERSATION_TTL_DAYS", "7")))
+    model_concurrency: int = field(default_factory=lambda: int(os.environ.get("OBSLAB_MODEL_CONCURRENCY", "1")))
+    model_queue: int = field(default_factory=lambda: int(os.environ.get("OBSLAB_MODEL_QUEUE", "8")))
+    request_deadline_s: float = field(
+        default_factory=lambda: float(os.environ.get("OBSLAB_REQUEST_DEADLINE_S", "120")))
     price_in: float = field(default_factory=lambda: float(os.environ.get("OBSLAB_PRICE_IN", "0")))
     price_out: float = field(default_factory=lambda: float(os.environ.get("OBSLAB_PRICE_OUT", "0")))
     environment: str = field(default_factory=lambda: os.environ.get("OBSLAB_ENVIRONMENT", "local"))
@@ -74,6 +81,12 @@ class Settings:
             problems.append(f"OBSLAB_MAX_TURNS={self.max_turns} (expected 1..200)")
         if self.conversation_ttl_days <= 0:
             problems.append(f"OBSLAB_CONVERSATION_TTL_DAYS={self.conversation_ttl_days} (expected > 0)")
+        if not 1 <= self.model_concurrency <= 64:
+            problems.append(f"OBSLAB_MODEL_CONCURRENCY={self.model_concurrency} (expected 1..64)")
+        if not 0 <= self.model_queue <= 1000:
+            problems.append(f"OBSLAB_MODEL_QUEUE={self.model_queue} (expected 0..1000)")
+        if not 1 <= self.request_deadline_s <= 3600:
+            problems.append(f"OBSLAB_REQUEST_DEADLINE_S={self.request_deadline_s} (expected 1..3600)")
         if not 100 <= self.db_timeout_ms <= 60_000:
             problems.append(f"OBSLAB_DB_TIMEOUT_MS={self.db_timeout_ms} (expected 100..60000)")
         if problems:

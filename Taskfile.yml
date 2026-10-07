@@ -281,8 +281,8 @@ tasks:
     cmds: ['{{.PY}} -m obslab chat --url http://127.0.0.1:8080 --host-header rag.localhost:8080']
 
   load:
-    desc: Send traffic to the deployed RAG to feed the dashboards (N=30)
-    cmds: ['{{.PY}} -m obslab load --url http://127.0.0.1:8080 --host-header rag.localhost:8080 --n {{.N | default 30}}']
+    desc: Send traffic to the deployed RAG to feed the dashboards (N=30; CONCURRENCY=12 sends a burst)
+    cmds: ['{{.PY}} -m obslab load --url http://127.0.0.1:8080 --host-header rag.localhost:8080 --n {{.N | default 30}} --concurrency {{.CONCURRENCY | default 1}}']
 
   # ── End-to-end checks against running infrastructure ────────────────────────
   test:stack:

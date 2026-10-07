@@ -95,6 +95,15 @@ class RagMetrics:
         self.node_duration = meter.create_histogram(
             "rag.graph.node.duration", unit="s", description="Duration of each LangGraph node.",
             explicit_bucket_boundaries_advisory=DURATION_BUCKETS)
+        self.admission_wait = meter.create_histogram(
+            "rag.admission.wait", unit="s",
+            description="Time a model call waited for a slot, apart from the model's own execution time.",
+            explicit_bucket_boundaries_advisory=DURATION_BUCKETS)
+        self.admission_waiting = meter.create_up_down_counter(
+            "rag.admission.waiting", unit="{call}", description="Model calls waiting for a slot right now.")
+        self.admission_rejections = meter.create_counter(
+            "rag.admission.rejections", unit="{request}",
+            description="Requests dropped before the model was asked: waiting line full, or deadline passed.")
         self.node_retries = meter.create_counter(
             "rag.graph.node.retries", unit="{attempt}",
             description="Node executions repeated by a retry policy (attempts after the first).")

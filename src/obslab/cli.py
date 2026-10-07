@@ -6,7 +6,8 @@
   chat [--url ...]               several questions in one conversation, typed one after the other
   conversations purge [--days N] delete the conversations idle for more than N days
   serve [--port 8000]            HTTP API (POST /ask)
-  load [--n 30] [--url ...] [--host-header H]   traffic generator (in-domain + off-topic questions)
+  load [--n 30] [--url ...] [--host-header H]   traffic generator (in-domain + off-topic questions);
+                                 --concurrency N sends N at once, --timeout S is how long a caller waits
 """
 
 from __future__ import annotations
@@ -161,28 +162,43 @@ def cmd_serve(a) -> int:
     return 0
 
 
+def _load_one(a, i: int) -> list[tuple[str, float]]:
+    """One simulated caller: a question, then its follow-up when it has one. Returns what happened
+    to each request as (outcome, seconds); the outcome is ok, busy (503), deadline (504) or error."""
+    q = random.choice(QUESTIONS_OFF if random.random() < a.off_topic else QUESTIONS_IN)
+    out, conversation = [], None
+    for question in (q, FOLLOW_UPS.get(q)):         # a follow-up, when the question has one
+        if question is None:
+            break
+        t = time.perf_counter()
+        try:
+            body = _post_ask(a.url, question, a.host_header, timeout=a.timeout, conversation_id=conversation)
+            conversation = body.get("conversation_id")
+            outcome, note = "ok", body.get("route")
+        except urllib.error.HTTPError as e:
+            outcome, note = {503: "busy", 504: "deadline"}.get(e.code, "error"), f"HTTP {e.code}"
+        except Exception as e:                      # the caller gave up (timeout) or the API is down
+            outcome, note = "error", type(e).__name__
+        elapsed = time.perf_counter() - t
+        out.append((outcome, elapsed))
+        print(f"{i + 1:>3} {elapsed:5.1f}s {outcome:<8} {note:<9} "
+              f"{'  + ' if question != q else ''}{question[:60]}", flush=True)
+        if outcome != "ok":
+            break
+        time.sleep(a.pause)
+    return out
+
+
 def cmd_load(a) -> int:
-    ok = err = 0
-    for i in range(a.n):
-        q = random.choice(QUESTIONS_OFF if random.random() < a.off_topic else QUESTIONS_IN)
-        conversation = None
-        for question in (q, FOLLOW_UPS.get(q)):         # a follow-up, when the question has one
-            if question is None:
-                break
-            t = time.perf_counter()
-            try:
-                body = _post_ask(a.url, question, a.host_header, conversation_id=conversation)
-                conversation = body.get("conversation_id")
-                ok += 1
-                print(f"{i + 1:>3} {time.perf_counter() - t:5.1f}s {body.get('route'):<9} "
-                      f"{'  + ' if question != q else ''}{question[:60]}")
-            except Exception as e:
-                err += 1
-                print(f"{i + 1:>3} ERROR {e}")
-                break
-            time.sleep(a.pause)
-    print(f"done: {ok} ok, {err} errors")
-    return 0 if err == 0 else 1
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=a.concurrency) as pool:
+        results = [r for rs in pool.map(lambda i: _load_one(a, i), range(a.n)) for r in rs]
+    count = {k: sum(1 for o, _ in results if o == k) for k in ("ok", "busy", "deadline", "error")}
+    times = sorted(t for o, t in results if o == "ok")
+    p50 = times[len(times) // 2] if times else 0.0
+    print(f"done: {count['ok']} ok (p50 {p50:.1f}s, max {times[-1] if times else 0.0:.1f}s), "
+          f"{count['busy']} busy, {count['deadline']} past deadline, {count['error']} errors")
+    return 0 if count["error"] == 0 else 1
 
 
 def main(argv=None) -> int:
@@ -224,6 +240,8 @@ def main(argv=None) -> int:
     s.add_argument("--url", default="http://127.0.0.1:8000")
     s.add_argument("--off-topic", type=float, default=0.2)
     s.add_argument("--pause", type=float, default=0.5)
+    s.add_argument("--concurrency", type=int, default=1, help="callers at the same time (a burst)")
+    s.add_argument("--timeout", type=float, default=180, help="seconds a caller waits before giving up")
     s.add_argument("--host-header", default="", help="e.g. rag.localhost:8080 when --url is the Gateway IP")
     s.set_defaults(fn=cmd_load)
 

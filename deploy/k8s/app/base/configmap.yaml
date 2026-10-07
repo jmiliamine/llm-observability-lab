@@ -23,6 +23,12 @@ data:
   PGDATABASE: obslab
   PGCONNECT_TIMEOUT: "3"
   OBSLAB_DB_TIMEOUT_MS: "5000"                               # statement timeout on vector queries
+  # Admission in front of the model (rag/admission.py). One model call at a time per replica and a
+  # short waiting line: beyond it a question is refused at once (503) instead of queueing unseen
+  # inside the model server. Sizing: queue x typical answer time < deadline < the caller's timeout.
+  OBSLAB_MODEL_CONCURRENCY: "1"
+  OBSLAB_MODEL_QUEUE: "8"
+  OBSLAB_REQUEST_DEADLINE_S: "120"
   # Conversations: turns of history used to understand a follow-up, questions allowed in one
   # conversation, and days an idle conversation is kept before the purge job deletes it.
   OBSLAB_HISTORY_TURNS: "3"
