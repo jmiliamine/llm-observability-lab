@@ -9,7 +9,7 @@ Task command, and each one needs a bit more than the previous.
 | Vector store | `task test:pgvector` | Docker | every push |
 | Compose end to end | `task test:compose` | Docker | every push |
 | Cluster end to end | `task test:k8s`, `task test:stack` | the k3d cluster (`task up`) | on main, weekly, and on pull requests labelled `cluster-e2e` |
-| Real models | `task test:ollama` | Ollama with both models pulled | no |
+| Real models | `task test:compose PROVIDER=ollama`, `task test:ollama` | Ollama with both models pulled | after each merge on main and weekly, in a separate workflow that does not block a merge |
 
 ## What each level checks
 
@@ -58,7 +58,9 @@ mounts the folder.
 **Real models** (`e2e/test_ollama.py`). With `llama3.2:3b` and `nomic-embed-text`: a question
 about the notes is answered from the right note, a follow-up is understood from the previous
 turn, a new subject in the same conversation is not dragged back to the old one, an off-topic
-question is declined.
+question is declined. The Compose end-to-end test also runs with these models
+(`PROVIDER=ollama`): the index is built with the real embedding model, and the checks on
+metrics, trace and logs are the same.
 
 ## Conventions
 
