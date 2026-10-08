@@ -1,6 +1,7 @@
 # <img src="docs/img/logo.svg" width="44" align="top" alt=""> rag-observability-k8s-lab
 
 [![CI](https://github.com/jmiliamine/rag-observability-k8s-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/jmiliamine/rag-observability-k8s-lab/actions/workflows/ci.yml)
+[![Real model](https://github.com/jmiliamine/rag-observability-k8s-lab/actions/workflows/real-model.yml/badge.svg?branch=main)](https://github.com/jmiliamine/rag-observability-k8s-lab/actions/workflows/real-model.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-3776ab?logo=python&logoColor=white)](pyproject.toml)
 [![OpenTelemetry GenAI conventions](https://img.shields.io/badge/OpenTelemetry-GenAI%20conventions-f5a800?logo=opentelemetry&logoColor=white)](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
@@ -152,8 +153,9 @@ machine, since the models run locally too.
 
 ## Tests
 
-The first three run in CI on every push, the cluster level on `main` and every week. Details in
-[tests/README.md](tests/README.md).
+The first three run in CI on every push, the cluster level on `main` and every week. The real
+models answer the same questions after each merge on `main`, on a hosted runner without a GPU,
+in about four minutes. Details in [tests/README.md](tests/README.md).
 
 | Command | What it proves | Needs |
 |---|---|---|
